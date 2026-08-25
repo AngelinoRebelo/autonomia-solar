@@ -31,14 +31,20 @@ def _open(url: str) -> None:
     webbrowser.open(url)
 
 
+def _is_cloud() -> bool:
+    return bool(os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("RAILWAY_PROJECT_ID"))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Calculadora de autonomia de banco de baterias")
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=PORT)
-    parser.add_argument("--no-browser", action="store_true")
+    cloud = _is_cloud()
+    env_port = os.environ.get("PORT")
+    parser.add_argument("--host", default="0.0.0.0" if cloud or env_port else "127.0.0.1")
+    parser.add_argument("--port", type=int, default=int(env_port or PORT))
+    parser.add_argument("--no-browser", action="store_true", default=cloud)
     args = parser.parse_args()
-    url = f"http://{args.host}:{args.port}/"
-    if _in_use(args.port):
+    url = f"http://127.0.0.1:{args.port}/"
+    if not cloud and _in_use(args.port):
         if not args.no_browser:
             _open(url)
         return

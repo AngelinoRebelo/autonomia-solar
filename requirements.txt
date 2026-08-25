@@ -1,0 +1,1 @@
+# Calculadora em Python 3 stdlib — sem pacotes extra.
