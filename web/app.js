@@ -8,7 +8,7 @@ function fmtW(n) {
   return Math.round(n).toLocaleString("pt-BR") + " W";
 }
 
-let catalog = { batteries: [], inverters: [] };
+let catalog = { batteries: [], inverters: [], panels: [] };
 let last = null;
 
 function currentBattery() {
@@ -16,6 +16,9 @@ function currentBattery() {
 }
 function currentInverter() {
   return catalog.inverters.find((x) => x.id === $("inverter").value);
+}
+function currentPanel() {
+  return (catalog.panels || []).find((x) => x.id === $("panel").value);
 }
 
 function setOfficialLock(el, locked) {
@@ -48,22 +51,38 @@ function applyOfficialBattery(b, { resetDod } = { resetDod: false }) {
 function applyOfficialInverter(i, { resetIdle } = { resetIdle: false }) {
   $("inv-eff").value = i.eff_pct;
   $("inv-eff-out").value = i.eff_pct;
+  const mppt = i.mppt_pct != null ? i.mppt_pct : 98;
+  $("mppt").value = mppt;
+  $("mppt-out").value = mppt;
   setOfficialLock($("inv-eff"), !i.custom);
+  setOfficialLock($("mppt"), !i.custom);
   if (resetIdle) {
     $("idle").value = i.idle_w;
     $("idle-out").value = i.idle_w;
   }
-  const extra = `Eficiência oficial do inversor ${i.eff_pct}%.`;
+  const extra = `Eficiência oficial do inversor ${i.eff_pct}% · MPPT ${mppt}%.`;
   $("hint").textContent = [$("hint").textContent, extra, i.notes].filter(Boolean).join(" ");
+}
+
+function applyOfficialPanel(p) {
+  $("panel-wp").value = p.wp;
+  $("panel-eff").value = p.eff_pct;
+  setOfficialLock($("panel-wp"), !p.custom);
+  setOfficialLock($("panel-eff"), !p.custom);
+  const extra = `${p.notes || ""} Pico oficial ${p.wp} Wp · η módulo ${p.eff_pct}%.`;
+  $("hint").textContent = [$("hint").textContent, extra].filter(Boolean).join(" ");
 }
 
 function fillSelects() {
   const prevBat = $("battery").value;
   const prevInv = $("inverter").value;
+  const prevPan = $("panel").value;
   const bat = $("battery");
   const inv = $("inverter");
+  const pan = $("panel");
   bat.innerHTML = "";
   inv.innerHTML = "";
+  pan.innerHTML = "";
   for (const b of catalog.batteries) {
     const opt = document.createElement("option");
     opt.value = b.id;
@@ -76,13 +95,23 @@ function fillSelects() {
     opt.textContent = `${i.brand} — ${i.model}`;
     inv.appendChild(opt);
   }
+  for (const p of catalog.panels || []) {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = `${p.brand} — ${p.model}`;
+    pan.appendChild(opt);
+  }
   const first = !prevBat;
   if (prevBat && catalog.batteries.some((b) => b.id === prevBat)) bat.value = prevBat;
   if (prevInv && catalog.inverters.some((i) => i.id === prevInv)) inv.value = prevInv;
+  if (prevPan && (catalog.panels || []).some((p) => p.id === prevPan)) pan.value = prevPan;
+  $("hint").textContent = "";
   const b = currentBattery() || catalog.batteries[0];
   const i = currentInverter() || catalog.inverters[0];
+  const p = currentPanel() || (catalog.panels || [])[0];
   if (b) applyOfficialBattery(b, { resetDod: first });
   if (i) applyOfficialInverter(i, { resetIdle: first });
+  if (p) applyOfficialPanel(p);
 }
 
 async function loadCatalog(refresh) {
@@ -107,6 +136,11 @@ async function compute() {
     inverter_eff_pct: $("inv-eff").value,
     idle_w: $("idle").value,
     load_w: $("load").value,
+    panel_wp: $("panel-wp").value,
+    panel_count: $("panel-count").value,
+    field_loss_pct: $("field-loss").value,
+    mppt_pct: $("mppt").value,
+    psh: $("psh").value,
   });
   const r = await fetch("/api/compute?" + params.toString());
   last = await r.json();
@@ -126,6 +160,24 @@ function render(d) {
   $("leg-util").textContent = fmtWh(d.useful_wh);
   $("leg-res").textContent = fmtWh(d.reserve_wh);
   $("leg-batloss").textContent = fmtWh(d.battery_loss_wh);
+  const pv = d.pv || {};
+  $("card-stc").textContent = fmtW(pv.stc_w || 0);
+  $("card-pv-net").textContent = fmtW(pv.stored_pv_w || pv.stored_peak_w || 0);
+  $("card-daily").textContent = fmtWh(pv.daily_wh || 0);
+  $("res-charge").textContent = pv.charge_hours_peak_label || "—";
+  $("res-charge-load").textContent = pv.charge_hours_load_label || "—";
+  $("res-charge-days").textContent = pv.charge_days_psh_label || "—";
+  $("res-charge").classList.toggle("warn", !pv.charge_hours_peak);
+  $("res-charge-load").classList.toggle("warn", !pv.charges_with_load);
+  const stc = pv.stc_w || 1;
+  $("pv-bar-net").style.flex = String(Math.max(pv.stored_pv_w || 0, 0.01) / stc);
+  $("pv-bar-chg").style.flex = String(Math.max(pv.charge_loss_w || 0, 0) / stc);
+  $("pv-bar-mppt").style.flex = String(Math.max(pv.mppt_loss_w || 0, 0) / stc);
+  $("pv-bar-field").style.flex = String(Math.max(pv.field_loss_w || 0, 0.01) / stc);
+  $("leg-pv-net").textContent = fmtW(pv.stored_pv_w || 0);
+  $("leg-pv-chg").textContent = fmtW(pv.charge_loss_w || 0);
+  $("leg-pv-mppt").textContent = fmtW(pv.mppt_loss_w || 0);
+  $("leg-pv-field").textContent = fmtW(pv.field_loss_w || 0);
   drawChart(d);
 }
 
@@ -203,14 +255,26 @@ function bind() {
     if (i) applyOfficialInverter(i, { resetIdle: true });
     compute();
   });
-  for (const id of ["dod", "bat-eff", "inv-eff", "idle", "load"]) {
+  $("panel").addEventListener("change", () => {
+    const p = currentPanel();
+    if (p) applyOfficialPanel(p);
+    compute();
+  });
+  for (const id of ["dod", "bat-eff", "inv-eff", "idle", "load", "mppt", "field-loss"]) {
     $(id).addEventListener("input", () => {
       $(id + "-out").value = $(id).value;
       compute();
     });
   }
+  $("psh").addEventListener("input", () => {
+    $("psh-out").value = Number($("psh").value).toFixed(1).replace(".", ",");
+    compute();
+  });
   $("capacity").addEventListener("input", compute);
   $("modules").addEventListener("input", compute);
+  $("panel-wp").addEventListener("input", compute);
+  $("panel-eff").addEventListener("input", compute);
+  $("panel-count").addEventListener("input", compute);
   $("btn-refresh").addEventListener("click", () => loadCatalog(true));
 }
 

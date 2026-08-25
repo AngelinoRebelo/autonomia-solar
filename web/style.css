@@ -72,7 +72,19 @@ h1 { font-size: 1.35rem; margin: 0 0 4px; font-weight: 650; }
 }
 .bar-util { background: var(--green); }
 .bar-bat { background: var(--amber); }
+.bar-amber { background: var(--amber); }
+.bar-blue { background: var(--blue); }
 .bar-res { background: #c5ccd4; }
+.dot.blue { background: var(--blue); }
+.form-title {
+  grid-column: 1 / -1;
+  margin: 8px 0 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--ink);
+}
+.solar-cards { margin-top: 4px; }
+.results strong.warn { color: var(--red); font-size: 1.25rem; }
 .bar-legend {
   display: flex;
   flex-wrap: wrap;
@@ -99,6 +111,7 @@ h1 { font-size: 1.35rem; margin: 0 0 4px; font-weight: 650; }
   margin: 12px 0;
 }
 .results strong { font-size: 1.8rem; }
+.solar-results { grid-template-columns: 1fr 1fr 1fr; }
 .form {
   display: grid;
   grid-template-columns: 1fr 1fr;

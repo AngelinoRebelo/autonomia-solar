@@ -11,7 +11,7 @@
     <header class="head">
       <div>
         <h1>Calculadora de Autonomia Solar</h1>
-        <p class="sub">Banco de baterias + inversor · perdas e eficiência incluídas</p>
+        <p class="sub">Placas + banco de baterias + inversor · perdas e dados oficiais de fabricante</p>
       </div>
       <button type="button" id="btn-refresh" class="ghost">Actualizar catálogo na rede</button>
     </header>
@@ -61,6 +61,52 @@
       </div>
     </section>
 
+    <section class="cards solar-cards">
+      <article>
+        <span>Pico STC das placas</span>
+        <strong id="card-stc">—</strong>
+      </article>
+      <article>
+        <span>Na bateria (após perdas)</span>
+        <strong id="card-pv-net">—</strong>
+      </article>
+      <article>
+        <span>Energia / dia (PSH)</span>
+        <strong id="card-daily">—</strong>
+      </article>
+    </section>
+
+    <section class="bar-block">
+      <h2>Perdas na geração (pico de sol)</h2>
+      <div class="bar" id="pv-bar">
+        <div class="bar-util" id="pv-bar-net"></div>
+        <div class="bar-amber" id="pv-bar-chg"></div>
+        <div class="bar-blue" id="pv-bar-mppt"></div>
+        <div class="bar-res" id="pv-bar-field"></div>
+      </div>
+      <div class="bar-legend">
+        <span><i class="dot green"></i> Armazenado <em id="leg-pv-net">—</em></span>
+        <span><i class="dot amber"></i> Carga bateria <em id="leg-pv-chg">—</em></span>
+        <span><i class="dot blue"></i> MPPT <em id="leg-pv-mppt">—</em></span>
+        <span><i class="dot gray"></i> Campo (sujidade/temp/cabos) <em id="leg-pv-field">—</em></span>
+      </div>
+    </section>
+
+    <section class="results solar-results">
+      <div>
+        <span>Carga completa (sol de pico, sem consumo)</span>
+        <strong id="res-charge">—</strong>
+      </div>
+      <div>
+        <span>Carga completa com a carga actual</span>
+        <strong id="res-charge-load">—</strong>
+      </div>
+      <div>
+        <span>Dias de sol (PSH) para encher</span>
+        <strong id="res-charge-days">—</strong>
+      </div>
+    </section>
+
     <form id="form" class="form">
       <label>Marca bateria
         <select id="battery"></select>
@@ -90,6 +136,31 @@
       </label>
       <label>Carga (W) <output id="load-out">350</output>
         <input id="load" type="range" min="0" max="3000" step="10" value="350">
+      </label>
+      <h2 class="form-title">Placas solares</h2>
+      <label>Marca / modelo da placa
+        <select id="panel"></select>
+      </label>
+      <label>Quantidade
+        <input id="panel-count" type="number" min="0" max="64" value="4">
+      </label>
+      <label>Potência STC (Wp) <small>oficial do fabricante</small>
+        <input id="panel-wp" type="number" min="50" max="800" step="1" value="575" readonly>
+      </label>
+      <label>Eficiência do módulo (%) <small>oficial do fabricante</small>
+        <input id="panel-eff" type="number" min="10" max="26" step="0.01" value="22.26" readonly>
+      </label>
+      <label>Eficiência MPPT (%) <output id="mppt-out">98</output>
+        <small>oficial do inversor</small>
+        <input id="mppt" type="range" min="90" max="99.9" step="0.1" value="98">
+      </label>
+      <label>Perdas de campo (%) <output id="field-loss-out">14</output>
+        <small>sujidade, temperatura, cabos, mismatch</small>
+        <input id="field-loss" type="range" min="0" max="40" step="1" value="14">
+      </label>
+      <label>Horas de sol pico (PSH) <output id="psh-out">5,0</output>
+        <small>Brasil típico ~4,5–5,5</small>
+        <input id="psh" type="range" min="2" max="7" step="0.1" value="5">
       </label>
     </form>
     <p class="hint" id="hint"></p>

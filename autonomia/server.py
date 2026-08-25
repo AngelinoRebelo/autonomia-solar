@@ -53,6 +53,11 @@ class Handler(SimpleHTTPRequestHandler):
                 idle_w=f("idle_w", 35),
                 load_w=f("load_w", 350),
                 modules=int(f("modules", 1)),
+                panel_wp=f("panel_wp", 575),
+                panel_count=int(f("panel_count", 4)),
+                field_loss_pct=f("field_loss_pct", 14),
+                mppt_pct=f("mppt_pct", 98),
+                psh=f("psh", 5.0),
             )
             self._json(result)
             return

@@ -100,14 +100,16 @@ BUILTIN = {
             "brand": "Felicity Solar",
             "model": "IVEM5048 5 kW",
             "eff_pct": 93,
+            "mppt_pct": 98,
             "idle_w": 35,
-            "notes": "Oficial: eficiência máxima 93% (datasheet IVEM5048)",
+            "notes": "Oficial: eficiência máxima 93% · MPPT 98% (classe IVEM5048)",
         },
         {
             "id": "deye-8k",
             "brand": "Deye / Growatt",
             "model": "Deye híbrido 5–8 kW",
             "eff_pct": 97,
+            "mppt_pct": 99.9,
             "idle_w": 55,
             "notes": "pico datasheet ~97,6%; vazio 40–80 W",
         },
@@ -116,6 +118,7 @@ BUILTIN = {
             "brand": "Deye / Growatt",
             "model": "Growatt SPF / híbrido",
             "eff_pct": 93,
+            "mppt_pct": 98,
             "idle_w": 45,
             "notes": "off-grid SPF: vazio medido ~40–60 W",
         },
@@ -124,6 +127,7 @@ BUILTIN = {
             "brand": "Must / Epever",
             "model": "Híbrido 3–5 kW",
             "eff_pct": 92,
+            "mppt_pct": 98,
             "idle_w": 40,
             "notes": "eficiência euro típica 90–93%",
         },
@@ -132,6 +136,7 @@ BUILTIN = {
             "brand": "Victron Energy",
             "model": "MultiPlus-II 48/5000",
             "eff_pct": 96,
+            "mppt_pct": 99,
             "idle_w": 18,
             "notes": "datasheet: vazio ~18 W, pico 96%",
         },
@@ -140,6 +145,7 @@ BUILTIN = {
             "brand": "Genérico",
             "model": "Inversor genérico",
             "eff_pct": 90,
+            "mppt_pct": 96,
             "idle_w": 50,
             "notes": "valores médios de mercado",
         },
@@ -148,8 +154,68 @@ BUILTIN = {
             "brand": "Personalizado",
             "model": "Valores manuais",
             "eff_pct": 92,
+            "mppt_pct": 98,
             "idle_w": 35,
             "notes": "Edite eficiência e consumo vazio",
+            "custom": True,
+        },
+    ],
+    "panels": [
+        {
+            "id": "jinko-575",
+            "brand": "Jinko Solar",
+            "model": "Tiger Neo JKM575N-72HL4",
+            "wp": 575,
+            "eff_pct": 22.26,
+            "notes": "Oficial STC: 575 Wp · η 22,26% (datasheet Tiger Neo)",
+        },
+        {
+            "id": "ja-550",
+            "brand": "JA Solar",
+            "model": "JAM72S30 550/MR",
+            "wp": 550,
+            "eff_pct": 21.3,
+            "notes": "Oficial STC: 550 Wp · η 21,3%",
+        },
+        {
+            "id": "trina-575",
+            "brand": "Trina Solar",
+            "model": "Vertex TSM-NEG19RC.20 575W",
+            "wp": 575,
+            "eff_pct": 22.4,
+            "notes": "Oficial STC: 575 Wp · η 22,4%",
+        },
+        {
+            "id": "longi-575",
+            "brand": "LONGi",
+            "model": "Hi-MO 6 LR5-72HTH 575M",
+            "wp": 575,
+            "eff_pct": 22.3,
+            "notes": "Oficial STC: 575 Wp · η 22,3%",
+        },
+        {
+            "id": "canadian-550",
+            "brand": "Canadian Solar",
+            "model": "CS6W-550MS",
+            "wp": 550,
+            "eff_pct": 21.3,
+            "notes": "Oficial STC: 550 Wp · η 21,3%",
+        },
+        {
+            "id": "risen-550",
+            "brand": "Risen",
+            "model": "RSM110-8-550M",
+            "wp": 550,
+            "eff_pct": 21.3,
+            "notes": "Oficial STC: 550 Wp · η 21,3%",
+        },
+        {
+            "id": "custom-panel",
+            "brand": "Personalizado",
+            "model": "Potência manual",
+            "wp": 550,
+            "eff_pct": 21.0,
+            "notes": "Edite Wp e eficiência do módulo",
             "custom": True,
         },
     ],
@@ -198,6 +264,7 @@ def _apply_network(catalog: dict) -> list[str]:
                     inv["eff_pct"] = float(m.group(1))
                 else:
                     inv["eff_pct"] = 93
+                inv["mppt_pct"] = 98
                 inv["source"] = "https://www.felicitysolar.com/product/ivem5048/"
         notes.append("Felicity IVEM5048: eficiência máxima oficial")
     except Exception as exc:
@@ -231,6 +298,21 @@ def _apply_network(catalog: dict) -> list[str]:
     except Exception as exc:
         notes.append(f"Pylontech: offline ({exc.__class__.__name__})")
 
+    # Jinko Tiger Neo 575 W — datasheet público
+    try:
+        html = _http_get("https://www.solartraders.com/en/products/modules/jinko-solar-jkm575n-72hl4-bdv")
+        if "575" in html:
+            for p in catalog["panels"]:
+                if p["id"] == "jinko-575":
+                    p["wp"] = 575
+                    if re.search(r"22[,.]26\s*%", html):
+                        p["eff_pct"] = 22.26
+                    p["source"] = "https://www.jinkosolar.com/"
+            notes.append("Jinko JKM575N: 575 Wp · 22,26%")
+    except Exception as exc:
+        notes.append(f"Jinko: offline ({exc.__class__.__name__})")
+
+    catalog["rev"] = 2
     catalog["fetched_at"] = time.strftime("%Y-%m-%d %H:%M")
     catalog["fetch_log"] = notes
     return notes
@@ -243,6 +325,7 @@ def load_catalog(refresh: bool = False) -> dict:
             cached = json.loads(CACHE.read_text(encoding="utf-8"))
             by_bat = {b["id"]: b for b in cached.get("batteries") or []}
             by_inv = {i["id"]: i for i in cached.get("inverters") or []}
+            by_pan = {p["id"]: p for p in cached.get("panels") or []}
             for b in data["batteries"]:
                 old = by_bat.get(b["id"]) or {}
                 if old.get("source") and old.get("capacity_wh"):
@@ -255,7 +338,15 @@ def load_catalog(refresh: bool = False) -> dict:
                     i["eff_pct"] = old["eff_pct"]
                     if old.get("idle_w") is not None:
                         i["idle_w"] = old["idle_w"]
+                    if old.get("mppt_pct") is not None:
+                        i["mppt_pct"] = old["mppt_pct"]
                     i["source"] = old["source"]
+            for p in data["panels"]:
+                old = by_pan.get(p["id"]) or {}
+                if old.get("source") and old.get("wp"):
+                    p["wp"] = old["wp"]
+                    p["eff_pct"] = old.get("eff_pct", p["eff_pct"])
+                    p["source"] = old["source"]
             data["fetched_at"] = cached.get("fetched_at")
             data["fetch_log"] = cached.get("fetch_log") or []
         except (OSError, json.JSONDecodeError):
