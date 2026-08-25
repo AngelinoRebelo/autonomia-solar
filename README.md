@@ -34,5 +34,5 @@ O catálogo traz **capacidade, eficiência, Wp e MPPT oficiais** do fabricante a
 O app **local no Ubuntu** continua no menu **Autonomia Solar**. O mesmo código também corre como site (Railway).
 
 - Código: https://github.com/AngelinoRebelo/autonomia-solar
-- Site: https://web-production-21394.up.railway.app
+- Site: https://bateriacapacidade.up.railway.app
   (cada `git push` na `master` faz deploy automático no Railway)
