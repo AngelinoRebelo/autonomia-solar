@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Calculadora de Autonomia Solar</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main class="wrap">
+    <header class="head">
+      <div>
+        <h1>Calculadora de Autonomia Solar</h1>
+        <p class="sub">Banco de baterias + inversor · perdas e eficiência incluídas</p>
+      </div>
+      <button type="button" id="btn-refresh" class="ghost">Actualizar catálogo na rede</button>
+    </header>
+    <p id="fetch-log" class="fetch-log" hidden></p>
+
+    <section class="cards">
+      <article>
+        <span>Energia total</span>
+        <strong id="card-total">—</strong>
+      </article>
+      <article>
+        <span>Dreno total (bateria)</span>
+        <strong id="card-draw">—</strong>
+      </article>
+      <article>
+        <span>Perdas (inversor)</span>
+        <strong id="card-loss">—</strong>
+      </article>
+    </section>
+
+    <section class="bar-block">
+      <h2>Divisão de energia da bateria</h2>
+      <div class="bar" id="energy-bar">
+        <div class="bar-util" id="bar-util"></div>
+        <div class="bar-bat" id="bar-bat"></div>
+        <div class="bar-res" id="bar-res"></div>
+      </div>
+      <div class="bar-legend">
+        <span><i class="dot green"></i> Útil <em id="leg-util">—</em></span>
+        <span><i class="dot gray"></i> Reserva DoD <em id="leg-res">—</em></span>
+        <span><i class="dot amber"></i> Perda bateria <em id="leg-batloss">—</em></span>
+      </div>
+    </section>
+
+    <section class="chart-block">
+      <canvas id="chart" width="920" height="320" aria-label="Autonomia versus carga"></canvas>
+    </section>
+
+    <section class="results">
+      <div>
+        <span>Autonomia est.</span>
+        <strong id="res-hours">—</strong>
+      </div>
+      <div>
+        <span>Energia útil</span>
+        <strong id="res-util">—</strong>
+      </div>
+    </section>
+
+    <form id="form" class="form">
+      <label>Marca bateria
+        <select id="battery"></select>
+      </label>
+      <label>Módulos
+        <input id="modules" type="number" min="1" max="32" value="1">
+      </label>
+      <label>Capacidade (Wh)
+        <input id="capacity" type="number" min="100" max="200000" step="1">
+      </label>
+      <label>DoD (%) <output id="dod-out">90</output>
+        <input id="dod" type="range" min="30" max="100" value="90">
+      </label>
+      <label>Eficiência bateria (%) <output id="bat-eff-out">95</output>
+        <input id="bat-eff" type="range" min="70" max="99" value="95">
+      </label>
+      <label>Marca inversor
+        <select id="inverter"></select>
+      </label>
+      <label>Eficiência inversor (%) <output id="inv-eff-out">92</output>
+        <input id="inv-eff" type="range" min="70" max="99" value="92">
+      </label>
+      <label>Consumo vazio (W) <output id="idle-out">35</output>
+        <input id="idle" type="range" min="0" max="150" value="35">
+      </label>
+      <label>Carga (W) <output id="load-out">350</output>
+        <input id="load" type="range" min="0" max="3000" step="10" value="350">
+      </label>
+    </form>
+    <p class="hint" id="hint"></p>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

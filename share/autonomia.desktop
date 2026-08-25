@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Autonomia Solar
+Name[pt_BR]=Autonomia Solar
+Comment=Calculadora de autonomia de banco de baterias e inversor
+Exec=/home/machaddoo/PROJETOS/autonomia/bin/autonomia
+Icon=/home/machaddoo/.local/share/icons/hicolor/256x256/apps/autonomia-solar.png
+Terminal=false
+StartupNotify=true
+StartupWMClass=AutonomiaSolar
+Categories=Utility;Science;Engineering;
+Keywords=solar;bateria;inversor;autonomia;felicity;
