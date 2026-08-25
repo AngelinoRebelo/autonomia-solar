@@ -20,3 +20,7 @@ Menu de aplicações → **Autonomia Solar**, ou:
 O catálogo (Felicity, Pylontech, Deye/Growatt, Victron, …) traz **capacidade e eficiência oficiais** do fabricante ao escolher o modelo. DoD, módulos, consumo vazio e carga continuam editáveis. Sem internet usa o catálogo local; o botão «Actualizar catálogo na rede» tenta datasheets oficiais.
 
 O app **local no Ubuntu** continua no menu **Autonomia Solar**. O mesmo código também corre como site (Railway).
+
+- Código: https://github.com/AngelinoRebelo/autonomia-solar
+- Site: https://web-production-21394.up.railway.app
+  (cada `git push` na `master` faz deploy automático no Railway)
