@@ -11,18 +11,64 @@ function fmtW(n) {
 let catalog = { batteries: [], inverters: [] };
 let last = null;
 
+function currentBattery() {
+  return catalog.batteries.find((x) => x.id === $("battery").value);
+}
+function currentInverter() {
+  return catalog.inverters.find((x) => x.id === $("inverter").value);
+}
+
+function setOfficialLock(el, locked) {
+  if (el.type === "range") {
+    el.disabled = locked;
+  } else {
+    el.readOnly = locked;
+  }
+  el.classList.toggle("official", locked);
+}
+
+function applyOfficialBattery(b, { resetDod } = { resetDod: false }) {
+  $("capacity").value = Math.round(b.capacity_wh);
+  $("bat-eff").value = b.eff_pct;
+  $("bat-eff-out").value = b.eff_pct;
+  setOfficialLock($("capacity"), !b.custom);
+  setOfficialLock($("bat-eff"), !b.custom);
+  if (resetDod) {
+    $("dod").value = b.dod_pct;
+    $("dod-out").value = b.dod_pct;
+  }
+  const bits = [
+    b.notes,
+    `Capacidade oficial ${Math.round(b.capacity_wh)} Wh · eficiência ${b.eff_pct}%.`,
+    b.source ? "Fonte: fabricante." : "",
+  ];
+  $("hint").textContent = bits.filter(Boolean).join(" ");
+}
+
+function applyOfficialInverter(i, { resetIdle } = { resetIdle: false }) {
+  $("inv-eff").value = i.eff_pct;
+  $("inv-eff-out").value = i.eff_pct;
+  setOfficialLock($("inv-eff"), !i.custom);
+  if (resetIdle) {
+    $("idle").value = i.idle_w;
+    $("idle-out").value = i.idle_w;
+  }
+  const extra = `Eficiência oficial do inversor ${i.eff_pct}%.`;
+  $("hint").textContent = [$("hint").textContent, extra, i.notes].filter(Boolean).join(" ");
+}
+
 function fillSelects() {
+  const prevBat = $("battery").value;
+  const prevInv = $("inverter").value;
   const bat = $("battery");
   const inv = $("inverter");
   bat.innerHTML = "";
   inv.innerHTML = "";
-  const batBrands = [];
   for (const b of catalog.batteries) {
     const opt = document.createElement("option");
     opt.value = b.id;
     opt.textContent = `${b.brand} — ${b.model}`;
     bat.appendChild(opt);
-    batBrands.push(b);
   }
   for (const i of catalog.inverters) {
     const opt = document.createElement("option");
@@ -30,28 +76,13 @@ function fillSelects() {
     opt.textContent = `${i.brand} — ${i.model}`;
     inv.appendChild(opt);
   }
-  if (catalog.batteries[0]) applyBattery(catalog.batteries[0]);
-  if (catalog.inverters[0]) applyInverter(catalog.inverters[0]);
-}
-
-function applyBattery(b) {
-  $("capacity").value = Math.round(b.capacity_wh);
-  $("dod").value = b.dod_pct;
-  $("dod-out").value = b.dod_pct;
-  $("bat-eff").value = b.eff_pct;
-  $("bat-eff-out").value = b.eff_pct;
-  $("hint").textContent = [b.notes, b.datasheet_dod_pct ? `Datasheet DoD ${b.datasheet_dod_pct}%.` : ""]
-    .filter(Boolean)
-    .join(" ");
-}
-
-function applyInverter(i) {
-  $("inv-eff").value = i.eff_pct;
-  $("inv-eff-out").value = i.eff_pct;
-  $("idle").value = i.idle_w;
-  $("idle-out").value = i.idle_w;
-  const extra = i.notes || "";
-  if (extra) $("hint").textContent = ($("hint").textContent + " · " + extra).replace(/^ · /, "");
+  const first = !prevBat;
+  if (prevBat && catalog.batteries.some((b) => b.id === prevBat)) bat.value = prevBat;
+  if (prevInv && catalog.inverters.some((i) => i.id === prevInv)) inv.value = prevInv;
+  const b = currentBattery() || catalog.batteries[0];
+  const i = currentInverter() || catalog.inverters[0];
+  if (b) applyOfficialBattery(b, { resetDod: first });
+  if (i) applyOfficialInverter(i, { resetIdle: first });
 }
 
 async function loadCatalog(refresh) {
@@ -163,13 +194,13 @@ function drawChart(d) {
 
 function bind() {
   $("battery").addEventListener("change", () => {
-    const b = catalog.batteries.find((x) => x.id === $("battery").value);
-    if (b) applyBattery(b);
+    const b = currentBattery();
+    if (b) applyOfficialBattery(b, { resetDod: false });
     compute();
   });
   $("inverter").addEventListener("change", () => {
-    const i = catalog.inverters.find((x) => x.id === $("inverter").value);
-    if (i) applyInverter(i);
+    const i = currentInverter();
+    if (i) applyOfficialInverter(i, { resetIdle: true });
     compute();
   });
   for (const id of ["dod", "bat-eff", "inv-eff", "idle", "load"]) {

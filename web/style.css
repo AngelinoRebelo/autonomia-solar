@@ -120,7 +120,17 @@ h1 { font-size: 1.35rem; margin: 0 0 4px; font-weight: 650; }
   color: var(--ink);
   background: #fff;
 }
-.form input[type="range"] { padding: 0; accent-color: var(--blue); }
+.form small {
+  color: var(--blue);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.form input:read-only,
+.form input:disabled {
+  background: #f4f7fa;
+  color: var(--ink);
+  cursor: default;
+}
 .hint { margin-top: 12px; }
 @media (max-width: 720px) {
   .cards, .form, .results { grid-template-columns: 1fr; }

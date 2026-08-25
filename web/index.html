@@ -68,20 +68,22 @@
       <label>Módulos
         <input id="modules" type="number" min="1" max="32" value="1">
       </label>
-      <label>Capacidade (Wh)
-        <input id="capacity" type="number" min="100" max="200000" step="1">
+      <label>Capacidade (Wh) <small>oficial do fabricante</small>
+        <input id="capacity" type="number" min="100" max="200000" step="1" readonly>
       </label>
       <label>DoD (%) <output id="dod-out">90</output>
         <input id="dod" type="range" min="30" max="100" value="90">
       </label>
       <label>Eficiência bateria (%) <output id="bat-eff-out">95</output>
+        <small>oficial do fabricante</small>
         <input id="bat-eff" type="range" min="70" max="99" value="95">
       </label>
       <label>Marca inversor
         <select id="inverter"></select>
       </label>
-      <label>Eficiência inversor (%) <output id="inv-eff-out">92</output>
-        <input id="inv-eff" type="range" min="70" max="99" value="92">
+      <label>Eficiência inversor (%) <output id="inv-eff-out">93</output>
+        <small>oficial do fabricante</small>
+        <input id="inv-eff" type="range" min="70" max="99" value="93">
       </label>
       <label>Consumo vazio (W) <output id="idle-out">35</output>
         <input id="idle" type="range" min="0" max="150" value="35">

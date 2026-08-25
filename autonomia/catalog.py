@@ -24,7 +24,7 @@ BUILTIN = {
             "datasheet_dod_pct": 95,
             "eff_pct": 95,
             "voltage_v": 51.2,
-            "notes": "LiFePO4 · datasheet DoD ≥95%",
+            "notes": "Oficial: 5,12 kWh · round-trip >95% · DoD datasheet ≥95%",
         },
         {
             "id": "felicity-lpbf48100",
@@ -90,17 +90,18 @@ BUILTIN = {
             "datasheet_dod_pct": 90,
             "eff_pct": 90,
             "voltage_v": 48.0,
-            "notes": "Edite capacidade, DoD e eficiência",
+            "notes": "Edite capacidade e eficiência",
+            "custom": True,
         },
     ],
     "inverters": [
         {
             "id": "felicity-5k",
             "brand": "Felicity Solar",
-            "model": "Híbrido ~5 kW",
-            "eff_pct": 92,
+            "model": "IVEM5048 5 kW",
+            "eff_pct": 93,
             "idle_w": 35,
-            "notes": "pico ~93%; vazio típico 30–45 W",
+            "notes": "Oficial: eficiência máxima 93% (datasheet IVEM5048)",
         },
         {
             "id": "deye-8k",
@@ -149,6 +150,7 @@ BUILTIN = {
             "eff_pct": 92,
             "idle_w": 35,
             "notes": "Edite eficiência e consumo vazio",
+            "custom": True,
         },
     ],
 }
@@ -164,20 +166,42 @@ def _apply_network(catalog: dict) -> list[str]:
     """Tenta datasheets públicos e actualiza o catálogo. Falhas são ignoradas."""
     notes: list[str] = []
 
-    # Felicity FLA48100-EU — capacidade 5,12 kWh, DoD ≥95%
+    # Felicity FLA48100-EU — 5,12 kWh, round-trip >95%, DoD ≥95%
     try:
         html = _http_get("https://us.felicitysolar.com/product/fla48100-eu/")
         dod = 95.0 if re.search(r"(?:DOD|Depth of Discharge)[^%]{0,80}(?:≥|&gt;=)?\s*95\s*%", html, re.I) else None
+        rte = 95.0 if re.search(r"(?:round[\s-]*trip|efficiency)[^%]{0,80}(?:≥|&gt;|>)?\s*95\s*%", html, re.I) else None
         if "5.12" in html or "5,12" in html:
             for b in catalog["batteries"]:
                 if b["id"] == "felicity-fla48100":
                     b["capacity_wh"] = 5120
                     if dod:
                         b["datasheet_dod_pct"] = dod
+                    if rte:
+                        b["eff_pct"] = rte
                     b["source"] = "https://us.felicitysolar.com/product/fla48100-eu/"
-            notes.append("Felicity FLA48100 actualizado (felicitysolar.com)")
+            notes.append("Felicity FLA48100: 5120 Wh oficiais")
     except Exception as exc:
-        notes.append(f"Felicity: offline ({exc.__class__.__name__})")
+        notes.append(f"Felicity bateria: offline ({exc.__class__.__name__})")
+
+    # Felicity IVEM5048 — eficiência máxima 93%
+    try:
+        html = _http_get("https://www.felicitysolar.com/product/ivem5048/")
+        m = re.search(r"(?:Maximum|Max\.?)\s+efficiency[^0-9%]{0,40}(\d+(?:\.\d+)?)\s*%", html, re.I)
+        if not m:
+            html2 = _http_get("https://www.felicitylatam.com/en_us/product/ivem-inversor-solar-off-grid-5kw-48v-110v-controlador-de-carga/")
+            m = re.search(r"Maximum Efficiency[^0-9%]{0,20}(\d+)\s*%", html2, re.I)
+            html = html2
+        for inv in catalog["inverters"]:
+            if inv["id"] == "felicity-5k":
+                if m:
+                    inv["eff_pct"] = float(m.group(1))
+                else:
+                    inv["eff_pct"] = 93
+                inv["source"] = "https://www.felicitysolar.com/product/ivem5048/"
+        notes.append("Felicity IVEM5048: eficiência máxima oficial")
+    except Exception as exc:
+        notes.append(f"Felicity inversor: offline ({exc.__class__.__name__})")
 
     # Victron MultiPlus-II — página de produto
     try:
@@ -217,8 +241,23 @@ def load_catalog(refresh: bool = False) -> dict:
     if CACHE.exists() and not refresh:
         try:
             cached = json.loads(CACHE.read_text(encoding="utf-8"))
-            if cached.get("batteries") and cached.get("inverters"):
-                data = cached
+            by_bat = {b["id"]: b for b in cached.get("batteries") or []}
+            by_inv = {i["id"]: i for i in cached.get("inverters") or []}
+            for b in data["batteries"]:
+                old = by_bat.get(b["id"]) or {}
+                if old.get("source") and old.get("capacity_wh"):
+                    b["capacity_wh"] = old["capacity_wh"]
+                    b["eff_pct"] = old.get("eff_pct", b["eff_pct"])
+                    b["source"] = old["source"]
+            for i in data["inverters"]:
+                old = by_inv.get(i["id"]) or {}
+                if old.get("source") and old.get("eff_pct"):
+                    i["eff_pct"] = old["eff_pct"]
+                    if old.get("idle_w") is not None:
+                        i["idle_w"] = old["idle_w"]
+                    i["source"] = old["source"]
+            data["fetched_at"] = cached.get("fetched_at")
+            data["fetch_log"] = cached.get("fetch_log") or []
         except (OSError, json.JSONDecodeError):
             pass
     if refresh or not data.get("fetched_at"):

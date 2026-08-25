@@ -17,4 +17,4 @@ Menu de aplicações → **Autonomia Solar**, ou:
 3. Dreno na bateria: `carga / eficiência do inversor + consumo vazio`
 4. Autonomia: `energia útil / dreno`
 
-O catálogo (Felicity, Pylontech, Deye/Growatt, Victron, …) vem com valores de datasheet e **tenta actualizar na rede** ao abrir ou no botão «Actualizar catálogo na rede». Sem internet usa o catálogo local.
+O catálogo (Felicity, Pylontech, Deye/Growatt, Victron, …) traz **capacidade e eficiência oficiais** do fabricante ao escolher o modelo. DoD, módulos, consumo vazio e carga continuam editáveis. Sem internet usa o catálogo local; o botão «Actualizar catálogo na rede» tenta datasheets oficiais.
