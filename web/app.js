@@ -1,10 +1,8 @@
-import { createEquipPicker, ensureProductModal, openProductModal } from "./equip-ui.js";
-
 const $ = (id) => document.getElementById(id);
+const { createEquipPicker, openProductModal } = window.EquipUI;
 
 function fmtWh(n) {
-  const v = Math.round(n);
-  return v.toLocaleString("pt-BR") + " Wh";
+  return Math.round(n).toLocaleString("pt-BR") + " Wh";
 }
 function fmtW(n) {
   return Math.round(n).toLocaleString("pt-BR") + " W";
@@ -15,8 +13,8 @@ let last = null;
 const pickers = {};
 
 function imgOf(item, kind) {
-  if (item?.image) return item.image;
-  return `/img/${kind}/generic-${kind === "panels" ? "panel" : kind.slice(0, -1)}.svg`;
+  if (item && item.image) return item.image;
+  return "/img/" + kind + "/generic-" + (kind === "panels" ? "panel" : kind.slice(0, -1)) + ".svg";
 }
 
 function currentBattery() {
@@ -30,11 +28,8 @@ function currentPanel() {
 }
 
 function setOfficialLock(el, locked) {
-  if (el.type === "range") {
-    el.disabled = locked;
-  } else {
-    el.readOnly = locked;
-  }
+  if (el.type === "range") el.disabled = locked;
+  else el.readOnly = locked;
   el.classList.toggle("official", locked);
 }
 
@@ -48,12 +43,9 @@ function applyOfficialBattery(b, { resetDod } = { resetDod: false }) {
     $("dod").value = b.dod_pct;
     $("dod-out").value = b.dod_pct;
   }
-  const bits = [
-    b.notes,
-    `Capacidade oficial ${Math.round(b.capacity_wh)} Wh · eficiência ${b.eff_pct}%.`,
-    b.source || b.product_url ? "Fonte: fabricante." : "",
-  ];
-  $("hint").textContent = bits.filter(Boolean).join(" ");
+  $("hint").textContent = [b.notes, "Capacidade oficial " + Math.round(b.capacity_wh) + " Wh · eficiência " + b.eff_pct + "%."]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function applyOfficialInverter(i, { resetIdle } = { resetIdle: false }) {
@@ -68,8 +60,9 @@ function applyOfficialInverter(i, { resetIdle } = { resetIdle: false }) {
     $("idle").value = i.idle_w;
     $("idle-out").value = i.idle_w;
   }
-  const extra = `Eficiência oficial do inversor ${i.eff_pct}% · MPPT ${mppt}%.`;
-  $("hint").textContent = [$("hint").textContent, extra, i.notes].filter(Boolean).join(" ");
+  $("hint").textContent = [$("hint").textContent, "Eficiência oficial do inversor " + i.eff_pct + "% · MPPT " + mppt + "%.", i.notes]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function applyOfficialPanel(p) {
@@ -77,23 +70,23 @@ function applyOfficialPanel(p) {
   $("panel-eff").value = p.eff_pct;
   setOfficialLock($("panel-wp"), !p.custom);
   setOfficialLock($("panel-eff"), !p.custom);
-  const extra = `${p.notes || ""} Pico oficial ${p.wp} Wp · η módulo ${p.eff_pct}%.`;
-  $("hint").textContent = [$("hint").textContent, extra].filter(Boolean).join(" ");
+  $("hint").textContent = [$("hint").textContent, (p.notes || "") + " Pico oficial " + p.wp + " Wp · η módulo " + p.eff_pct + "%."]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function fillHiddenSelect(sel, items, prev) {
   sel.innerHTML = "";
-  for (const item of items) {
+  items.forEach((item) => {
     const opt = document.createElement("option");
     opt.value = item.id;
-    opt.textContent = `${item.brand} — ${item.model}`;
+    opt.textContent = item.brand + " — " + item.model;
     sel.appendChild(opt);
-  }
+  });
   if (prev && items.some((x) => x.id === prev)) sel.value = prev;
 }
 
 function fillSelects() {
-  ensureProductModal();
   const prevBat = $("battery").value;
   const prevInv = $("inverter").value;
   const prevPan = $("panel").value;
@@ -107,8 +100,7 @@ function fillSelects() {
 
   const first = !prevBat;
   $("hint").textContent = "";
-
-  const label = (x) => `${x.brand} — ${x.model}`;
+  const label = (x) => x.brand + " — " + x.model;
 
   pickers.battery = createEquipPicker({
     root: $("battery-picker"),
@@ -142,7 +134,7 @@ function fillSelects() {
     root: $("panel-picker"),
     items: catalog.panels || [],
     value: pan.value,
-    getLabel: (p) => `${p.brand} — ${p.model}${p.wp ? ` (${p.wp} W)` : ""}`,
+    getLabel: (p) => p.brand + " — " + p.model + (p.wp ? " (" + p.wp + " W)" : ""),
     getImage: (p) => imgOf(p, "panels"),
     onChange: (p) => {
       pan.value = p.id;
@@ -160,21 +152,36 @@ function fillSelects() {
   if (p) applyOfficialPanel(p);
 }
 
+function openOfficial(kind) {
+  if (kind === "battery") openProductModal(currentBattery(), "Bateria");
+  else if (kind === "inverter") openProductModal(currentInverter(), "Inversor");
+  else if (kind === "panel") openProductModal(currentPanel(), "Placa solar");
+}
+
 function wireDetailButtons() {
   const map = [
-    ["detail-battery", () => currentBattery(), "Bateria"],
-    ["detail-inverter", () => currentInverter(), "Inversor"],
-    ["detail-panel", () => currentPanel(), "Placa solar"],
+    ["detail-battery", () => openOfficial("battery")],
+    ["detail-inverter", () => openOfficial("inverter")],
+    ["detail-panel", () => openOfficial("panel")],
   ];
-  for (const [id, getter, title] of map) {
+  map.forEach(([id, fn]) => {
     const btn = $(id);
-    if (!btn || btn.dataset.wired) continue;
+    if (!btn || btn.dataset.wired) return;
     btn.dataset.wired = "1";
-    btn.addEventListener("click", () => {
-      const item = getter();
-      if (item) openProductModal(item, title);
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      fn();
     });
-  }
+  });
+
+  document.querySelectorAll("[data-official]").forEach((el) => {
+    if (el.dataset.wired) return;
+    el.dataset.wired = "1";
+    el.addEventListener("click", (e) => {
+      e.preventDefault();
+      openOfficial(el.getAttribute("data-official"));
+    });
+  });
 }
 
 async function loadCatalog(refresh) {
@@ -185,7 +192,7 @@ async function loadCatalog(refresh) {
   const el = $("fetch-log");
   if (log) {
     el.hidden = false;
-    el.textContent = (catalog.fetched_at ? `Catálogo ${catalog.fetched_at}: ` : "") + log;
+    el.textContent = (catalog.fetched_at ? "Catálogo " + catalog.fetched_at + ": " : "") + log;
   }
   await compute();
 }
@@ -309,12 +316,12 @@ function drawChart(d) {
 
 function bind() {
   wireDetailButtons();
-  for (const id of ["dod", "bat-eff", "inv-eff", "idle", "load", "mppt", "field-loss"]) {
+  ["dod", "bat-eff", "inv-eff", "idle", "load", "mppt", "field-loss"].forEach((id) => {
     $(id).addEventListener("input", () => {
       $(id + "-out").value = $(id).value;
       compute();
     });
-  }
+  });
   $("psh").addEventListener("input", () => {
     $("psh-out").value = Number($("psh").value).toFixed(1).replace(".", ",");
     compute();

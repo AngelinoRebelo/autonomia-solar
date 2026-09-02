@@ -107,66 +107,83 @@
       </div>
     </section>
 
+    <section class="load-block" aria-label="Carga em uso">
+      <label>Carga em uso (W) <output id="load-out">350</output>
+        <input id="load" type="range" min="0" max="3000" step="10" value="350">
+      </label>
+    </section>
+
     <form id="form" class="form">
-      <div class="equip-row">
-        <div class="field-block">
-          <span class="field-label">Marca bateria</span>
-          <div id="battery-picker"></div>
-          <select id="battery" class="sr-only" aria-hidden="true" tabindex="-1"></select>
+      <div class="equip-block">
+        <div class="equip-row">
+          <div class="field-block">
+            <span class="field-label">Marca bateria</span>
+            <div id="battery-picker"></div>
+            <select id="battery" class="sr-only" aria-hidden="true" tabindex="-1"></select>
+          </div>
+          <button type="button" class="ghost visit-btn" id="detail-battery">Ver produto</button>
         </div>
-        <button type="button" class="ghost visit-btn" id="detail-battery">Ver produto</button>
       </div>
+
       <label>Módulos
         <input id="modules" type="number" min="1" max="32" value="1">
       </label>
-      <label>Capacidade (Wh) <small>oficial do fabricante</small>
+      <label>Capacidade (Wh)
+        <button type="button" class="official-link" data-official="battery">oficial do fabricante</button>
         <input id="capacity" type="number" min="100" max="200000" step="1" readonly>
       </label>
       <label>DoD (%) <output id="dod-out">90</output>
         <input id="dod" type="range" min="30" max="100" value="90">
       </label>
       <label>Eficiência bateria (%) <output id="bat-eff-out">95</output>
-        <small>oficial do fabricante</small>
+        <button type="button" class="official-link" data-official="battery">oficial do fabricante</button>
         <input id="bat-eff" type="range" min="70" max="99" value="95">
       </label>
-      <div class="equip-row">
-        <div class="field-block">
-          <span class="field-label">Marca inversor</span>
-          <div id="inverter-picker"></div>
-          <select id="inverter" class="sr-only" aria-hidden="true" tabindex="-1"></select>
+
+      <div class="equip-block">
+        <div class="equip-row">
+          <div class="field-block">
+            <span class="field-label">Marca inversor</span>
+            <div id="inverter-picker"></div>
+            <select id="inverter" class="sr-only" aria-hidden="true" tabindex="-1"></select>
+          </div>
+          <button type="button" class="ghost visit-btn" id="detail-inverter">Ver produto</button>
         </div>
-        <button type="button" class="ghost visit-btn" id="detail-inverter">Ver produto</button>
+        <div class="equip-controls">
+          <label>Eficiência inversor (%) <output id="inv-eff-out">93</output>
+            <button type="button" class="official-link" data-official="inverter">oficial do fabricante</button>
+            <input id="inv-eff" type="range" min="70" max="99" value="93">
+          </label>
+          <label>Consumo vazio (W) <output id="idle-out">35</output>
+            <input id="idle" type="range" min="0" max="150" value="35">
+          </label>
+        </div>
       </div>
-      <label>Eficiência inversor (%) <output id="inv-eff-out">93</output>
-        <small>oficial do fabricante</small>
-        <input id="inv-eff" type="range" min="70" max="99" value="93">
-      </label>
-      <label>Consumo vazio (W) <output id="idle-out">35</output>
-        <input id="idle" type="range" min="0" max="150" value="35">
-      </label>
-      <label>Carga (W) <output id="load-out">350</output>
-        <input id="load" type="range" min="0" max="3000" step="10" value="350">
-      </label>
+
       <h2 class="form-title">Placas solares</h2>
-      <div class="equip-row">
-        <div class="field-block">
-          <span class="field-label">Marca / modelo da placa</span>
-          <div id="panel-picker"></div>
-          <select id="panel" class="sr-only" aria-hidden="true" tabindex="-1"></select>
+      <div class="equip-block">
+        <div class="equip-row">
+          <div class="field-block">
+            <span class="field-label">Marca / modelo da placa</span>
+            <div id="panel-picker"></div>
+            <select id="panel" class="sr-only" aria-hidden="true" tabindex="-1"></select>
+          </div>
+          <button type="button" class="ghost visit-btn" id="detail-panel">Ver produto</button>
         </div>
-        <button type="button" class="ghost visit-btn" id="detail-panel">Ver produto</button>
       </div>
       <label>Quantidade
         <input id="panel-count" type="number" min="0" max="64" value="4">
       </label>
-      <label>Potência STC (Wp) <small>oficial do fabricante</small>
+      <label>Potência STC (Wp)
+        <button type="button" class="official-link" data-official="panel">oficial do fabricante</button>
         <input id="panel-wp" type="number" min="50" max="800" step="1" value="575" readonly>
       </label>
-      <label>Eficiência do módulo (%) <small>oficial do fabricante</small>
+      <label>Eficiência do módulo (%)
+        <button type="button" class="official-link" data-official="panel">oficial do fabricante</button>
         <input id="panel-eff" type="number" min="10" max="26" step="0.01" value="22.26" readonly>
       </label>
       <label>Eficiência MPPT (%) <output id="mppt-out">98</output>
-        <small>oficial do inversor</small>
+        <button type="button" class="official-link" data-official="inverter">oficial do inversor</button>
         <input id="mppt" type="range" min="90" max="99.9" step="0.1" value="98">
       </label>
       <label>Perdas de campo (%) <output id="field-loss-out">14</output>
@@ -180,6 +197,25 @@
     </form>
     <p class="hint" id="hint"></p>
   </main>
-  <script type="module" src="/app.js"></script>
+
+  <div id="product-modal" class="product-modal hidden" aria-hidden="true">
+    <div class="product-modal-backdrop" data-close></div>
+    <div class="product-modal-card" role="dialog" aria-modal="true" aria-labelledby="product-modal-title">
+      <button type="button" class="product-modal-close" data-close aria-label="Fechar">×</button>
+      <div class="product-modal-media">
+        <img id="product-modal-img" src="" alt="" />
+      </div>
+      <div class="product-modal-body">
+        <p class="section-kicker" id="product-modal-kind"></p>
+        <h3 id="product-modal-title"></h3>
+        <p class="hint" id="product-modal-meta"></p>
+        <p id="product-modal-notes"></p>
+        <div class="card-actions" id="product-modal-links"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/equip-ui.js"></script>
+  <script src="/app.js"></script>
 </body>
 </html>
