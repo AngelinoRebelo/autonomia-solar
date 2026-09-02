@@ -21,8 +21,15 @@ def _open(url: str) -> None:
     chrome = "/usr/bin/google-chrome-stable"
     if os.path.isfile(chrome):
         subprocess.Popen(
-            [chrome, "--profile-directory=Default", "--class=AutonomiaSolar",
-             "--name=Autonomia Solar", f"--app={url}"],
+            [
+                chrome,
+                "--profile-directory=Default",
+                "--class=AutonomiaSolar",
+                "--name=Autonomia Solar",
+                "--start-maximized",
+                "--window-size=1920,1080",
+                f"--app={url}",
+            ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True,
