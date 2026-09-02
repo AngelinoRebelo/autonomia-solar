@@ -1,3 +1,5 @@
+import { createEquipPicker, ensureProductModal, openProductModal } from "./equip-ui.js";
+
 const $ = (id) => document.getElementById(id);
 
 function fmtWh(n) {
@@ -10,6 +12,12 @@ function fmtW(n) {
 
 let catalog = { batteries: [], inverters: [], panels: [] };
 let last = null;
+const pickers = {};
+
+function imgOf(item, kind) {
+  if (item?.image) return item.image;
+  return `/img/${kind}/generic-${kind === "panels" ? "panel" : kind.slice(0, -1)}.svg`;
+}
 
 function currentBattery() {
   return catalog.batteries.find((x) => x.id === $("battery").value);
@@ -43,7 +51,7 @@ function applyOfficialBattery(b, { resetDod } = { resetDod: false }) {
   const bits = [
     b.notes,
     `Capacidade oficial ${Math.round(b.capacity_wh)} Wh · eficiência ${b.eff_pct}%.`,
-    b.source ? "Fonte: fabricante." : "",
+    b.source || b.product_url ? "Fonte: fabricante." : "",
   ];
   $("hint").textContent = bits.filter(Boolean).join(" ");
 }
@@ -73,45 +81,100 @@ function applyOfficialPanel(p) {
   $("hint").textContent = [$("hint").textContent, extra].filter(Boolean).join(" ");
 }
 
+function fillHiddenSelect(sel, items, prev) {
+  sel.innerHTML = "";
+  for (const item of items) {
+    const opt = document.createElement("option");
+    opt.value = item.id;
+    opt.textContent = `${item.brand} — ${item.model}`;
+    sel.appendChild(opt);
+  }
+  if (prev && items.some((x) => x.id === prev)) sel.value = prev;
+}
+
 function fillSelects() {
+  ensureProductModal();
   const prevBat = $("battery").value;
   const prevInv = $("inverter").value;
   const prevPan = $("panel").value;
   const bat = $("battery");
   const inv = $("inverter");
   const pan = $("panel");
-  bat.innerHTML = "";
-  inv.innerHTML = "";
-  pan.innerHTML = "";
-  for (const b of catalog.batteries) {
-    const opt = document.createElement("option");
-    opt.value = b.id;
-    opt.textContent = `${b.brand} — ${b.model}`;
-    bat.appendChild(opt);
-  }
-  for (const i of catalog.inverters) {
-    const opt = document.createElement("option");
-    opt.value = i.id;
-    opt.textContent = `${i.brand} — ${i.model}`;
-    inv.appendChild(opt);
-  }
-  for (const p of catalog.panels || []) {
-    const opt = document.createElement("option");
-    opt.value = p.id;
-    opt.textContent = `${p.brand} — ${p.model}`;
-    pan.appendChild(opt);
-  }
+
+  fillHiddenSelect(bat, catalog.batteries, prevBat);
+  fillHiddenSelect(inv, catalog.inverters, prevInv);
+  fillHiddenSelect(pan, catalog.panels || [], prevPan);
+
   const first = !prevBat;
-  if (prevBat && catalog.batteries.some((b) => b.id === prevBat)) bat.value = prevBat;
-  if (prevInv && catalog.inverters.some((i) => i.id === prevInv)) inv.value = prevInv;
-  if (prevPan && (catalog.panels || []).some((p) => p.id === prevPan)) pan.value = prevPan;
   $("hint").textContent = "";
+
+  const label = (x) => `${x.brand} — ${x.model}`;
+
+  pickers.battery = createEquipPicker({
+    root: $("battery-picker"),
+    items: catalog.batteries,
+    value: bat.value,
+    getLabel: label,
+    getImage: (b) => imgOf(b, "batteries"),
+    onChange: (b) => {
+      bat.value = b.id;
+      applyOfficialBattery(b, { resetDod: false });
+      compute();
+    },
+    onOpenDetail: (b) => openProductModal(b, "Bateria"),
+  });
+
+  pickers.inverter = createEquipPicker({
+    root: $("inverter-picker"),
+    items: catalog.inverters,
+    value: inv.value,
+    getLabel: label,
+    getImage: (i) => imgOf(i, "inverters"),
+    onChange: (i) => {
+      inv.value = i.id;
+      applyOfficialInverter(i, { resetIdle: true });
+      compute();
+    },
+    onOpenDetail: (i) => openProductModal(i, "Inversor"),
+  });
+
+  pickers.panel = createEquipPicker({
+    root: $("panel-picker"),
+    items: catalog.panels || [],
+    value: pan.value,
+    getLabel: (p) => `${p.brand} — ${p.model}${p.wp ? ` (${p.wp} W)` : ""}`,
+    getImage: (p) => imgOf(p, "panels"),
+    onChange: (p) => {
+      pan.value = p.id;
+      applyOfficialPanel(p);
+      compute();
+    },
+    onOpenDetail: (p) => openProductModal(p, "Placa solar"),
+  });
+
   const b = currentBattery() || catalog.batteries[0];
   const i = currentInverter() || catalog.inverters[0];
   const p = currentPanel() || (catalog.panels || [])[0];
   if (b) applyOfficialBattery(b, { resetDod: first });
   if (i) applyOfficialInverter(i, { resetIdle: first });
   if (p) applyOfficialPanel(p);
+}
+
+function wireDetailButtons() {
+  const map = [
+    ["detail-battery", () => currentBattery(), "Bateria"],
+    ["detail-inverter", () => currentInverter(), "Inversor"],
+    ["detail-panel", () => currentPanel(), "Placa solar"],
+  ];
+  for (const [id, getter, title] of map) {
+    const btn = $(id);
+    if (!btn || btn.dataset.wired) continue;
+    btn.dataset.wired = "1";
+    btn.addEventListener("click", () => {
+      const item = getter();
+      if (item) openProductModal(item, title);
+    });
+  }
 }
 
 async function loadCatalog(refresh) {
@@ -245,21 +308,7 @@ function drawChart(d) {
 }
 
 function bind() {
-  $("battery").addEventListener("change", () => {
-    const b = currentBattery();
-    if (b) applyOfficialBattery(b, { resetDod: false });
-    compute();
-  });
-  $("inverter").addEventListener("change", () => {
-    const i = currentInverter();
-    if (i) applyOfficialInverter(i, { resetIdle: true });
-    compute();
-  });
-  $("panel").addEventListener("change", () => {
-    const p = currentPanel();
-    if (p) applyOfficialPanel(p);
-    compute();
-  });
+  wireDetailButtons();
   for (const id of ["dod", "bat-eff", "inv-eff", "idle", "load", "mppt", "field-loss"]) {
     $(id).addEventListener("input", () => {
       $(id + "-out").value = $(id).value;

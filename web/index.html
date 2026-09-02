@@ -108,9 +108,14 @@
     </section>
 
     <form id="form" class="form">
-      <label>Marca bateria
-        <select id="battery"></select>
-      </label>
+      <div class="equip-row">
+        <div class="field-block">
+          <span class="field-label">Marca bateria</span>
+          <div id="battery-picker"></div>
+          <select id="battery" class="sr-only" aria-hidden="true" tabindex="-1"></select>
+        </div>
+        <button type="button" class="ghost visit-btn" id="detail-battery">Ver produto</button>
+      </div>
       <label>Módulos
         <input id="modules" type="number" min="1" max="32" value="1">
       </label>
@@ -124,9 +129,14 @@
         <small>oficial do fabricante</small>
         <input id="bat-eff" type="range" min="70" max="99" value="95">
       </label>
-      <label>Marca inversor
-        <select id="inverter"></select>
-      </label>
+      <div class="equip-row">
+        <div class="field-block">
+          <span class="field-label">Marca inversor</span>
+          <div id="inverter-picker"></div>
+          <select id="inverter" class="sr-only" aria-hidden="true" tabindex="-1"></select>
+        </div>
+        <button type="button" class="ghost visit-btn" id="detail-inverter">Ver produto</button>
+      </div>
       <label>Eficiência inversor (%) <output id="inv-eff-out">93</output>
         <small>oficial do fabricante</small>
         <input id="inv-eff" type="range" min="70" max="99" value="93">
@@ -138,9 +148,14 @@
         <input id="load" type="range" min="0" max="3000" step="10" value="350">
       </label>
       <h2 class="form-title">Placas solares</h2>
-      <label>Marca / modelo da placa
-        <select id="panel"></select>
-      </label>
+      <div class="equip-row">
+        <div class="field-block">
+          <span class="field-label">Marca / modelo da placa</span>
+          <div id="panel-picker"></div>
+          <select id="panel" class="sr-only" aria-hidden="true" tabindex="-1"></select>
+        </div>
+        <button type="button" class="ghost visit-btn" id="detail-panel">Ver produto</button>
+      </div>
       <label>Quantidade
         <input id="panel-count" type="number" min="0" max="64" value="4">
       </label>
@@ -165,6 +180,6 @@
     </form>
     <p class="hint" id="hint"></p>
   </main>
-  <script src="/app.js"></script>
+  <script type="module" src="/app.js"></script>
 </body>
 </html>
