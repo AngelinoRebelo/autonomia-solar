@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const { createEquipPicker, openProductModal } = window.EquipUI;
+const Equip = window.EquipUI || {};
 
 function fmtWh(n) {
   return Math.round(n).toLocaleString("pt-BR") + " Wh";
@@ -18,22 +18,53 @@ function imgOf(item, kind) {
 }
 
 function currentBattery() {
-  return catalog.batteries.find((x) => x.id === $("battery").value);
+  return catalog.batteries.find((x) => x.id === $("battery").value) || catalog.batteries[0];
 }
 function currentInverter() {
-  return catalog.inverters.find((x) => x.id === $("inverter").value);
+  return catalog.inverters.find((x) => x.id === $("inverter").value) || catalog.inverters[0];
 }
 function currentPanel() {
-  return (catalog.panels || []).find((x) => x.id === $("panel").value);
+  return (catalog.panels || []).find((x) => x.id === $("panel").value) || (catalog.panels || [])[0];
+}
+
+function itemForKind(kind) {
+  if (kind === "battery") return currentBattery();
+  if (kind === "inverter") return currentInverter();
+  if (kind === "panel") return currentPanel();
+  return null;
+}
+
+function titleForKind(kind) {
+  if (kind === "battery") return "Bateria";
+  if (kind === "inverter") return "Inversor";
+  if (kind === "panel") return "Placa solar";
+  return "Equipamento";
+}
+
+function openOfficial(kind) {
+  const item = itemForKind(kind);
+  if (!item) {
+    alert("Seleccione um equipamento primeiro.");
+    return;
+  }
+  if (typeof Equip.openProductModal === "function") {
+    Equip.openProductModal(item, titleForKind(kind));
+    return;
+  }
+  const url = item.product_url || item.source || item.brand_url;
+  if (url) window.open(url, "_blank", "noopener,noreferrer");
+  else alert(item.brand + " — " + item.model + "\n" + (item.notes || ""));
 }
 
 function setOfficialLock(el, locked) {
+  if (!el) return;
   if (el.type === "range") el.disabled = locked;
   else el.readOnly = locked;
   el.classList.toggle("official", locked);
 }
 
 function applyOfficialBattery(b, { resetDod } = { resetDod: false }) {
+  if (!b) return;
   $("capacity").value = Math.round(b.capacity_wh);
   $("bat-eff").value = b.eff_pct;
   $("bat-eff-out").value = b.eff_pct;
@@ -49,6 +80,7 @@ function applyOfficialBattery(b, { resetDod } = { resetDod: false }) {
 }
 
 function applyOfficialInverter(i, { resetIdle } = { resetIdle: false }) {
+  if (!i) return;
   $("inv-eff").value = i.eff_pct;
   $("inv-eff-out").value = i.eff_pct;
   const mppt = i.mppt_pct != null ? i.mppt_pct : 98;
@@ -66,6 +98,7 @@ function applyOfficialInverter(i, { resetIdle } = { resetIdle: false }) {
 }
 
 function applyOfficialPanel(p) {
+  if (!p) return;
   $("panel-wp").value = p.wp;
   $("panel-eff").value = p.eff_pct;
   setOfficialLock($("panel-wp"), !p.custom);
@@ -102,86 +135,56 @@ function fillSelects() {
   $("hint").textContent = "";
   const label = (x) => x.brand + " — " + x.model;
 
-  pickers.battery = createEquipPicker({
-    root: $("battery-picker"),
-    items: catalog.batteries,
-    value: bat.value,
-    getLabel: label,
-    getImage: (b) => imgOf(b, "batteries"),
-    onChange: (b) => {
-      bat.value = b.id;
-      applyOfficialBattery(b, { resetDod: false });
-      compute();
-    },
-    onOpenDetail: (b) => openProductModal(b, "Bateria"),
-  });
+  if (typeof Equip.createEquipPicker === "function") {
+    pickers.battery = Equip.createEquipPicker({
+      root: $("battery-picker"),
+      items: catalog.batteries,
+      value: bat.value,
+      getLabel: label,
+      getImage: (b) => imgOf(b, "batteries"),
+      onChange: (b) => {
+        bat.value = b.id;
+        applyOfficialBattery(b, { resetDod: false });
+        compute();
+      },
+      onOpenDetail: (b) => Equip.openProductModal(b, "Bateria"),
+    });
 
-  pickers.inverter = createEquipPicker({
-    root: $("inverter-picker"),
-    items: catalog.inverters,
-    value: inv.value,
-    getLabel: label,
-    getImage: (i) => imgOf(i, "inverters"),
-    onChange: (i) => {
-      inv.value = i.id;
-      applyOfficialInverter(i, { resetIdle: true });
-      compute();
-    },
-    onOpenDetail: (i) => openProductModal(i, "Inversor"),
-  });
+    pickers.inverter = Equip.createEquipPicker({
+      root: $("inverter-picker"),
+      items: catalog.inverters,
+      value: inv.value,
+      getLabel: label,
+      getImage: (i) => imgOf(i, "inverters"),
+      onChange: (i) => {
+        inv.value = i.id;
+        applyOfficialInverter(i, { resetIdle: true });
+        compute();
+      },
+      onOpenDetail: (i) => Equip.openProductModal(i, "Inversor"),
+    });
 
-  pickers.panel = createEquipPicker({
-    root: $("panel-picker"),
-    items: catalog.panels || [],
-    value: pan.value,
-    getLabel: (p) => p.brand + " — " + p.model + (p.wp ? " (" + p.wp + " W)" : ""),
-    getImage: (p) => imgOf(p, "panels"),
-    onChange: (p) => {
-      pan.value = p.id;
-      applyOfficialPanel(p);
-      compute();
-    },
-    onOpenDetail: (p) => openProductModal(p, "Placa solar"),
-  });
+    pickers.panel = Equip.createEquipPicker({
+      root: $("panel-picker"),
+      items: catalog.panels || [],
+      value: pan.value,
+      getLabel: (p) => p.brand + " — " + p.model + (p.wp ? " (" + p.wp + " W)" : ""),
+      getImage: (p) => imgOf(p, "panels"),
+      onChange: (p) => {
+        pan.value = p.id;
+        applyOfficialPanel(p);
+        compute();
+      },
+      onOpenDetail: (p) => Equip.openProductModal(p, "Placa solar"),
+    });
+  }
 
-  const b = currentBattery() || catalog.batteries[0];
-  const i = currentInverter() || catalog.inverters[0];
-  const p = currentPanel() || (catalog.panels || [])[0];
+  const b = currentBattery();
+  const i = currentInverter();
+  const p = currentPanel();
   if (b) applyOfficialBattery(b, { resetDod: first });
   if (i) applyOfficialInverter(i, { resetIdle: first });
   if (p) applyOfficialPanel(p);
-}
-
-function openOfficial(kind) {
-  if (kind === "battery") openProductModal(currentBattery(), "Bateria");
-  else if (kind === "inverter") openProductModal(currentInverter(), "Inversor");
-  else if (kind === "panel") openProductModal(currentPanel(), "Placa solar");
-}
-
-function wireDetailButtons() {
-  const map = [
-    ["detail-battery", () => openOfficial("battery")],
-    ["detail-inverter", () => openOfficial("inverter")],
-    ["detail-panel", () => openOfficial("panel")],
-  ];
-  map.forEach(([id, fn]) => {
-    const btn = $(id);
-    if (!btn || btn.dataset.wired) return;
-    btn.dataset.wired = "1";
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      fn();
-    });
-  });
-
-  document.querySelectorAll("[data-official]").forEach((el) => {
-    if (el.dataset.wired) return;
-    el.dataset.wired = "1";
-    el.addEventListener("click", (e) => {
-      e.preventDefault();
-      openOfficial(el.getAttribute("data-official"));
-    });
-  });
 }
 
 async function loadCatalog(refresh) {
@@ -315,7 +318,31 @@ function drawChart(d) {
 }
 
 function bind() {
-  wireDetailButtons();
+  // Delegação: funciona mesmo com cache antigo / re-render
+  document.addEventListener(
+    "click",
+    (e) => {
+      const openBtn = e.target.closest("[data-open-product]");
+      if (openBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        openOfficial(openBtn.getAttribute("data-open-product"));
+        return;
+      }
+      if (e.target.closest("#product-modal [data-close]")) {
+        if (typeof Equip.closeProductModal === "function") Equip.closeProductModal();
+        else {
+          const modal = $("product-modal");
+          if (modal) {
+            modal.classList.add("hidden");
+            modal.setAttribute("aria-hidden", "true");
+          }
+        }
+      }
+    },
+    true
+  );
+
   ["dod", "bat-eff", "inv-eff", "idle", "load", "mppt", "field-loss"].forEach((id) => {
     $(id).addEventListener("input", () => {
       $(id + "-out").value = $(id).value;

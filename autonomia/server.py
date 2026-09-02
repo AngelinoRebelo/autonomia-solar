@@ -28,6 +28,12 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
+    def end_headers(self) -> None:
+        path = urlparse(self.path).path
+        if path.endswith((".js", ".css", ".html", "/")) or path in ("", "/"):
+            self.send_header("Cache-Control", "no-store, max-age=0")
+        return super().end_headers()
+
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
         if path == "/api/catalog":

@@ -17,9 +17,11 @@ html, body {
   font: 15px/1.45 "Segoe UI", Ubuntu, Cantarell, sans-serif;
 }
 .wrap {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 20px 18px 40px;
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  padding: 16px 20px 40px;
+  box-sizing: border-box;
 }
 .head {
   display: flex;
@@ -165,6 +167,27 @@ h1 { font-size: 1.35rem; margin: 0 0 4px; font-weight: 650; }
   min-width: 0;
   flex: 1;
 }
+.form .field-block {
+  /* campos do formulário fora do equip-row */
+}
+.form > .field-block input,
+.form > .field-block input[type="range"],
+.equip-controls .field-block input,
+.equip-controls .field-block input[type="range"] {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+  color: var(--ink);
+  background: #fff;
+  width: 100%;
+}
+.form > .field-block input[type="range"],
+.equip-controls .field-block input[type="range"] {
+  padding: 0;
+  border: 0;
+  accent-color: var(--blue);
+}
 .field-label {
   font-size: 0.88rem;
   color: var(--muted);
@@ -197,23 +220,29 @@ h1 { font-size: 1.35rem; margin: 0 0 4px; font-weight: 650; }
   font-size: 0.88rem;
   color: var(--muted);
 }
-.visit-btn {
-  white-space: nowrap;
-  height: fit-content;
-  margin-bottom: 1px;
-}
 .official-link {
   align-self: flex-start;
-  border: 0;
-  background: none;
-  padding: 0;
-  color: var(--blue);
+  border: 0 !important;
+  background: transparent !important;
+  padding: 0 !important;
+  color: var(--blue) !important;
   font-size: 0.75rem;
   font-weight: 600;
   cursor: pointer;
   text-align: left;
+  width: auto !important;
+  box-shadow: none !important;
 }
 .official-link:hover { text-decoration: underline; }
+
+.visit-btn {
+  white-space: nowrap;
+  height: fit-content;
+  margin-bottom: 1px;
+  cursor: pointer;
+  z-index: 2;
+  position: relative;
+}
 
 .load-block {
   margin: 12px 0 4px;

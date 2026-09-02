@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Calculadora de Autonomia Solar</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/style.css?v=3">
 </head>
 <body>
   <main class="wrap">
@@ -47,7 +47,7 @@
     </section>
 
     <section class="chart-block">
-      <canvas id="chart" width="920" height="320" aria-label="Autonomia versus carga"></canvas>
+      <canvas id="chart" width="1400" height="360" aria-label="Autonomia versus carga"></canvas>
     </section>
 
     <section class="results">
@@ -108,12 +108,11 @@
     </section>
 
     <section class="load-block" aria-label="Carga em uso">
-      <label>Carga em uso (W) <output id="load-out">350</output>
-        <input id="load" type="range" min="0" max="3000" step="10" value="350">
-      </label>
+      <label for="load">Carga em uso (W) <output id="load-out">350</output></label>
+      <input id="load" type="range" min="0" max="3000" step="10" value="350">
     </section>
 
-    <form id="form" class="form">
+    <form id="form" class="form" onsubmit="return false;">
       <div class="equip-block">
         <div class="equip-row">
           <div class="field-block">
@@ -121,24 +120,26 @@
             <div id="battery-picker"></div>
             <select id="battery" class="sr-only" aria-hidden="true" tabindex="-1"></select>
           </div>
-          <button type="button" class="ghost visit-btn" id="detail-battery">Ver produto</button>
+          <button type="button" class="ghost visit-btn" id="detail-battery" data-open-product="battery">Ver produto</button>
         </div>
       </div>
 
-      <label>Módulos
+      <label for="modules">Módulos
         <input id="modules" type="number" min="1" max="32" value="1">
       </label>
-      <label>Capacidade (Wh)
-        <button type="button" class="official-link" data-official="battery">oficial do fabricante</button>
+      <div class="field-block">
+        <span class="field-label">Capacidade (Wh)</span>
+        <button type="button" class="official-link" data-open-product="battery">oficial do fabricante</button>
         <input id="capacity" type="number" min="100" max="200000" step="1" readonly>
-      </label>
-      <label>DoD (%) <output id="dod-out">90</output>
+      </div>
+      <label for="dod">DoD (%) <output id="dod-out">90</output>
         <input id="dod" type="range" min="30" max="100" value="90">
       </label>
-      <label>Eficiência bateria (%) <output id="bat-eff-out">95</output>
-        <button type="button" class="official-link" data-official="battery">oficial do fabricante</button>
+      <div class="field-block">
+        <span class="field-label">Eficiência bateria (%) <output id="bat-eff-out">95</output></span>
+        <button type="button" class="official-link" data-open-product="battery">oficial do fabricante</button>
         <input id="bat-eff" type="range" min="70" max="99" value="95">
-      </label>
+      </div>
 
       <div class="equip-block">
         <div class="equip-row">
@@ -147,14 +148,15 @@
             <div id="inverter-picker"></div>
             <select id="inverter" class="sr-only" aria-hidden="true" tabindex="-1"></select>
           </div>
-          <button type="button" class="ghost visit-btn" id="detail-inverter">Ver produto</button>
+          <button type="button" class="ghost visit-btn" id="detail-inverter" data-open-product="inverter">Ver produto</button>
         </div>
         <div class="equip-controls">
-          <label>Eficiência inversor (%) <output id="inv-eff-out">93</output>
-            <button type="button" class="official-link" data-official="inverter">oficial do fabricante</button>
+          <div class="field-block">
+            <span class="field-label">Eficiência inversor (%) <output id="inv-eff-out">93</output></span>
+            <button type="button" class="official-link" data-open-product="inverter">oficial do fabricante</button>
             <input id="inv-eff" type="range" min="70" max="99" value="93">
-          </label>
-          <label>Consumo vazio (W) <output id="idle-out">35</output>
+          </div>
+          <label for="idle">Consumo vazio (W) <output id="idle-out">35</output>
             <input id="idle" type="range" min="0" max="150" value="35">
           </label>
         </div>
@@ -168,29 +170,32 @@
             <div id="panel-picker"></div>
             <select id="panel" class="sr-only" aria-hidden="true" tabindex="-1"></select>
           </div>
-          <button type="button" class="ghost visit-btn" id="detail-panel">Ver produto</button>
+          <button type="button" class="ghost visit-btn" id="detail-panel" data-open-product="panel">Ver produto</button>
         </div>
       </div>
-      <label>Quantidade
+      <label for="panel-count">Quantidade
         <input id="panel-count" type="number" min="0" max="64" value="4">
       </label>
-      <label>Potência STC (Wp)
-        <button type="button" class="official-link" data-official="panel">oficial do fabricante</button>
+      <div class="field-block">
+        <span class="field-label">Potência STC (Wp)</span>
+        <button type="button" class="official-link" data-open-product="panel">oficial do fabricante</button>
         <input id="panel-wp" type="number" min="50" max="800" step="1" value="575" readonly>
-      </label>
-      <label>Eficiência do módulo (%)
-        <button type="button" class="official-link" data-official="panel">oficial do fabricante</button>
+      </div>
+      <div class="field-block">
+        <span class="field-label">Eficiência do módulo (%)</span>
+        <button type="button" class="official-link" data-open-product="panel">oficial do fabricante</button>
         <input id="panel-eff" type="number" min="10" max="26" step="0.01" value="22.26" readonly>
-      </label>
-      <label>Eficiência MPPT (%) <output id="mppt-out">98</output>
-        <button type="button" class="official-link" data-official="inverter">oficial do inversor</button>
+      </div>
+      <div class="field-block">
+        <span class="field-label">Eficiência MPPT (%) <output id="mppt-out">98</output></span>
+        <button type="button" class="official-link" data-open-product="inverter">oficial do inversor</button>
         <input id="mppt" type="range" min="90" max="99.9" step="0.1" value="98">
-      </label>
-      <label>Perdas de campo (%) <output id="field-loss-out">14</output>
+      </div>
+      <label for="field-loss">Perdas de campo (%) <output id="field-loss-out">14</output>
         <small>sujidade, temperatura, cabos, mismatch</small>
         <input id="field-loss" type="range" min="0" max="40" step="1" value="14">
       </label>
-      <label>Horas de sol pico (PSH) <output id="psh-out">5,0</output>
+      <label for="psh">Horas de sol pico (PSH) <output id="psh-out">5,0</output>
         <small>Brasil típico ~4,5–5,5</small>
         <input id="psh" type="range" min="2" max="7" step="0.1" value="5">
       </label>
@@ -199,9 +204,9 @@
   </main>
 
   <div id="product-modal" class="product-modal hidden" aria-hidden="true">
-    <div class="product-modal-backdrop" data-close></div>
+    <div class="product-modal-backdrop" data-close="1"></div>
     <div class="product-modal-card" role="dialog" aria-modal="true" aria-labelledby="product-modal-title">
-      <button type="button" class="product-modal-close" data-close aria-label="Fechar">×</button>
+      <button type="button" class="product-modal-close" data-close="1" aria-label="Fechar">×</button>
       <div class="product-modal-media">
         <img id="product-modal-img" src="" alt="" />
       </div>
@@ -215,7 +220,7 @@
     </div>
   </div>
 
-  <script src="/equip-ui.js"></script>
-  <script src="/app.js"></script>
+  <script src="/equip-ui.js?v=3"></script>
+  <script src="/app.js?v=3"></script>
 </body>
 </html>
