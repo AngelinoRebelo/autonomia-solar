@@ -359,6 +359,34 @@ function bind() {
   $("panel-eff").addEventListener("input", compute);
   $("panel-count").addEventListener("input", compute);
   $("btn-refresh").addEventListener("click", () => loadCatalog(true));
+  $("btn-quadro")?.addEventListener("click", openQuadro);
+}
+
+function openQuadro() {
+  const bat = currentBattery() || {};
+  const loadW = Number($("load").value) || 0;
+  const drawW = last && last.battery_draw_w != null ? Number(last.battery_draw_w) : loadW;
+  const stcW =
+    last && last.pv && last.pv.stc_w != null
+      ? Number(last.pv.stc_w)
+      : (Number($("panel-wp").value) || 0) * (Number($("panel-count").value) || 0);
+  const payload = {
+    load_w: loadW,
+    battery_draw_w: drawW,
+    battery_v: bat.voltage_v || 48,
+    ac_v: 220,
+    panel_stc_w: stcW,
+    cable_ac_m: 15,
+    cable_bat_m: 2,
+    cable_pv_m: 15,
+  };
+  try {
+    sessionStorage.setItem("autonomia-quadro", JSON.stringify(payload));
+  } catch (_) {}
+  const q = new URLSearchParams(
+    Object.fromEntries(Object.entries(payload).map(([k, v]) => [k, String(Math.round(v * 100) / 100)]))
+  );
+  window.location.href = "/quadro/?" + q.toString();
 }
 
 bind();

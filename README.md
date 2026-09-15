@@ -33,6 +33,9 @@ O catálogo traz **capacidade, eficiência, Wp e MPPT oficiais** do fabricante a
 
 O app **local no Ubuntu** continua no menu **Autonomia Solar**. O mesmo código também corre como site (Railway).
 
+Após dimensionar o sistema, use **Abrir montagem do quadro elétrico** para criar o quadro de distribuição ilustrado (disjuntores, cabos, DPS/DR) segundo NBR 5410 / 16690.
+
 - Código: https://github.com/AngelinoRebelo/autonomia-solar
 - Site: https://bateriacapacidade.up.railway.app
   (cada `git push` na `master` faz deploy automático no Railway)
+- Quadro: https://bateriacapacidade.up.railway.app/quadro/

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quadro de Distribuição — Autonomia Solar</title>
+  <link rel="stylesheet" href="/quadro/quadro.css?v=1">
+</head>
+<body>
+  <main class="wrap">
+    <header class="head">
+      <div>
+        <p class="kicker">NBR 5410 · NBR 16690</p>
+        <h1>Criar quadro de distribuição</h1>
+        <p class="sub">Disjuntores, cabos e proteções dimensionados pela demanda do sistema · ilustração do quadro</p>
+      </div>
+      <div class="head-actions">
+        <a class="ghost" href="/">← Voltar à calculadora</a>
+        <button type="button" class="primary" id="btn-print">Imprimir / PDF</button>
+      </div>
+    </header>
+
+    <p class="disclaimer">Orientativo. Não substitui projeto elétrico, ART nem parecer da concessionária.</p>
+
+    <section class="demand cards" id="demand-cards">
+      <article><span>Carga AC</span><strong id="d-load">—</strong></article>
+      <article><span>Dreno na bateria</span><strong id="d-draw">—</strong></article>
+      <article><span>Pico FV (STC)</span><strong id="d-stc">—</strong></article>
+      <article><span>Tensão banco</span><strong id="d-batv">—</strong></article>
+    </section>
+
+    <section class="workspace">
+      <aside class="panel-form">
+        <h2>Demanda e comprimentos</h2>
+        <label>Carga AC (W)
+          <input id="load-w" type="number" min="0" step="10" value="350">
+        </label>
+        <label>Dreno bateria (W)
+          <input id="bat-draw" type="number" min="0" step="10" value="400">
+        </label>
+        <label>Tensão banco (V)
+          <select id="bat-v">
+            <option value="12">12 V</option>
+            <option value="24">24 V</option>
+            <option value="48" selected>48 V</option>
+          </select>
+        </label>
+        <label>Tensão AC (V)
+          <select id="ac-v">
+            <option value="127">127 V</option>
+            <option value="220" selected>220 V</option>
+          </select>
+        </label>
+        <label>Pico FV STC (W)
+          <input id="stc-w" type="number" min="0" step="50" value="2300">
+        </label>
+        <label>Cabo AC (m)
+          <input id="len-ac" type="number" min="1" step="1" value="15">
+        </label>
+        <label>Cabo bateria (m)
+          <input id="len-bat" type="number" min="0.5" step="0.5" value="2">
+        </label>
+        <label>Cabo FV (m)
+          <input id="len-pv" type="number" min="1" step="1" value="15">
+        </label>
+        <button type="button" class="primary" id="btn-size">Recalcular (norma)</button>
+
+        <h2>Circuito extra</h2>
+        <label>Nome
+          <input id="ex-name" type="text" value="Iluminação">
+        </label>
+        <label>Potência (W)
+          <input id="ex-w" type="number" min="0" step="50" value="200">
+        </label>
+        <label>Comprimento (m)
+          <input id="ex-len" type="number" min="1" step="1" value="12">
+        </label>
+        <button type="button" class="ghost" id="btn-add">+ Adicionar circuito</button>
+      </aside>
+
+      <div class="board-col">
+        <h2>Quadro ilustrado</h2>
+        <canvas id="board" width="920" height="640" aria-label="Ilustração do quadro de distribuição"></canvas>
+        <p class="hint" id="board-hint">Critério: Ib ≤ In ≤ Iz · cabos Cu PVC 70 °C (método B1 aproximado)</p>
+      </div>
+    </section>
+
+    <section class="tables">
+      <div>
+        <h2>Circuitos dimensionados</h2>
+        <div class="table-wrap">
+          <table id="ckt-table">
+            <thead>
+              <tr>
+                <th>Circuito</th>
+                <th>Ib</th>
+                <th>In</th>
+                <th>Cabo</th>
+                <th>Iz</th>
+                <th>ΔV</th>
+                <th>Regra</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <h2>Lista de materiais (BOM)</h2>
+        <div class="table-wrap">
+          <table id="bom-table">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Qtd</th>
+                <th>Especificação</th>
+                <th>Circuito</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="notes" id="notes"></section>
+  </main>
+  <script src="/quadro/quadro.js?v=1"></script>
+</body>
+</html>

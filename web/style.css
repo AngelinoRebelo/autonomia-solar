@@ -265,6 +265,38 @@ h1 { font-size: 1.35rem; margin: 0 0 4px; font-weight: 650; }
   accent-color: var(--blue);
 }
 
+.quadro-cta {
+  margin: 14px 0;
+  background: var(--card);
+  border-radius: 12px;
+  padding: 16px 18px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  border: 1px solid var(--line);
+}
+.quadro-cta h2 {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+}
+.quadro-cta .hint { margin: 0; }
+.primary {
+  border: 1px solid var(--blue);
+  background: var(--blue);
+  color: #fff;
+  border-radius: 8px;
+  padding: 10px 16px;
+  cursor: pointer;
+  font: inherit;
+  white-space: nowrap;
+}
+.primary:hover { filter: brightness(1.05); }
+@media (max-width: 720px) {
+  .quadro-cta { flex-direction: column; align-items: stretch; }
+  .primary { width: 100%; justify-content: center; }
+}
+
 .equip-picker { position: relative; width: 100%; }
 .equip-picker-btn {
   width: 100%;

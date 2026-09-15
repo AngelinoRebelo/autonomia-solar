@@ -6,7 +6,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from autonomia import calc, catalog
+from autonomia import calc, catalog, nbr_quadro
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
@@ -67,9 +67,57 @@ class Handler(SimpleHTTPRequestHandler):
             )
             self._json(result)
             return
+        if path == "/api/quadro":
+            q = parse_qs(urlparse(self.path).query)
+
+            def f(name: str, default: float) -> float:
+                try:
+                    return float((q.get(name) or [default])[0])
+                except (TypeError, ValueError):
+                    return float(default)
+
+            data = nbr_quadro.build_board(
+                load_w=f("load_w", 350),
+                battery_draw_w=f("battery_draw_w", 400),
+                battery_v=f("battery_v", 48),
+                ac_v=f("ac_v", 220),
+                panel_stc_w=f("panel_stc_w", 2300),
+                cable_ac_m=f("cable_ac_m", 15),
+                cable_bat_m=f("cable_bat_m", 2),
+                cable_pv_m=f("cable_pv_m", 15),
+            )
+            self._json(data)
+            return
+        if path in ("/quadro", "/quadro/"):
+            self.path = "/quadro/index.html"
+            return super().do_GET()
         if path in ("/", ""):
             self.path = "/index.html"
         return super().do_GET()
+
+    def do_POST(self) -> None:  # noqa: N802
+        path = urlparse(self.path).path
+        if path != "/api/quadro":
+            self.send_error(404)
+            return
+        length = int(self.headers.get("Content-Length") or 0)
+        raw = self.rfile.read(length) if length else b"{}"
+        try:
+            body = json.loads(raw.decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            body = {}
+        data = nbr_quadro.build_board(
+            load_w=float(body.get("load_w") or 350),
+            battery_draw_w=float(body.get("battery_draw_w") or 400),
+            battery_v=float(body.get("battery_v") or 48),
+            ac_v=float(body.get("ac_v") or 220),
+            panel_stc_w=float(body.get("panel_stc_w") or 2300),
+            cable_ac_m=float(body.get("cable_ac_m") or 15),
+            cable_bat_m=float(body.get("cable_bat_m") or 2),
+            cable_pv_m=float(body.get("cable_pv_m") or 15),
+            circuits_extra=body.get("circuits_extra") or [],
+        )
+        self._json(data)
 
 
 def serve(host: str, port: int) -> None:
