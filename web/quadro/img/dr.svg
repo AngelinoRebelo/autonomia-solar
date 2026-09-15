@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 140" width="90" height="140">
+  <rect x="4" y="4" width="82" height="132" rx="4" fill="#ecfdf5" stroke="#059669" stroke-width="1.8"/>
+  <rect x="10" y="10" width="70" height="18" rx="2" fill="#065f46"/>
+  <text x="45" y="23" text-anchor="middle" fill="#fff" font-family="Arial" font-size="9" font-weight="700">DR 30mA</text>
+  <circle cx="30" cy="55" r="9" fill="#10b981" stroke="#064e3b" stroke-width="2"/>
+  <circle cx="60" cy="55" r="9" fill="#10b981" stroke="#064e3b" stroke-width="2"/>
+  <rect x="20" y="78" width="50" height="22" rx="2" fill="#d1fae5" stroke="#059669"/>
+  <text x="45" y="93" text-anchor="middle" fill="#065f46" font-family="Arial" font-size="10" font-weight="700">TEST</text>
+  <rect x="18" y="2" width="8" height="6" rx="1" fill="#6b7280"/>
+  <rect x="32" y="2" width="8" height="6" rx="1" fill="#6b7280"/>
+  <rect x="50" y="2" width="8" height="6" rx="1" fill="#3b82f6"/>
+  <rect x="64" y="2" width="8" height="6" rx="1" fill="#3b82f6"/>
+  <rect x="18" y="132" width="8" height="6" rx="1" fill="#6b7280"/>
+  <rect x="32" y="132" width="8" height="6" rx="1" fill="#6b7280"/>
+  <rect x="50" y="132" width="8" height="6" rx="1" fill="#3b82f6"/>
+  <rect x="64" y="132" width="8" height="6" rx="1" fill="#3b82f6"/>
+</svg>

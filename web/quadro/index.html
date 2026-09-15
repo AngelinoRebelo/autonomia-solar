@@ -3,128 +3,137 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Quadro de Distribuição — Autonomia Solar</title>
-  <link rel="stylesheet" href="/quadro/quadro.css?v=1">
+  <title>Quadro Pro — Montagem Elétrica Interativa</title>
+  <link rel="stylesheet" href="/quadro/quadro.css?v=2">
 </head>
-<body>
-  <main class="wrap">
-    <header class="head">
-      <div>
-        <p class="kicker">NBR 5410 · NBR 16690</p>
-        <h1>Criar quadro de distribuição</h1>
-        <p class="sub">Disjuntores, cabos e proteções dimensionados pela demanda do sistema · ilustração do quadro</p>
+<body class="editor-page">
+  <header class="topbar">
+    <div>
+      <p class="kicker">Quadro Pro · NBR 5410 / 16690</p>
+      <h1>Montagem interativa do quadro</h1>
+    </div>
+    <div class="topbar-actions">
+      <a class="ghost" href="/">← Calculadora</a>
+      <button type="button" class="ghost" id="btn-autosize">Dimensionar pela demanda</button>
+      <button type="button" class="ghost" id="btn-autowire">Auto-ligar sistema</button>
+      <button type="button" class="ghost" id="btn-clear-wires">Limpar cabos</button>
+      <button type="button" class="primary" id="btn-export">Exportar projeto JSON</button>
+      <button type="button" class="primary" id="btn-print">Imprimir</button>
+    </div>
+  </header>
+
+  <p class="disclaimer">Software de apoio a engenheiros. Validar projeto, ART e normas locais antes da instalação.</p>
+
+  <section class="demand cards">
+    <article><span>Carga AC</span><strong id="d-load">—</strong></article>
+    <article><span>Dreno bateria</span><strong id="d-draw">—</strong></article>
+    <article><span>Pico FV</span><strong id="d-stc">—</strong></article>
+    <article><span>Banco</span><strong id="d-batv">—</strong></article>
+  </section>
+
+  <div class="editor-shell">
+    <aside class="palette">
+      <h2>Biblioteca</h2>
+      <p class="hint">Arraste para o quadro ou clique para adicionar.</p>
+      <button type="button" class="pal-item" data-type="breaker_ac" draggable="true">
+        <img src="/quadro/img/breaker-ac.svg" alt=""> Disjuntor AC (MCB)
+      </button>
+      <button type="button" class="pal-item" data-type="breaker_dc" draggable="true">
+        <img src="/quadro/img/breaker-dc.svg" alt=""> Disjuntor CC
+      </button>
+      <button type="button" class="pal-item" data-type="dr" draggable="true">
+        <img src="/quadro/img/dr.svg" alt=""> DR 30 mA
+      </button>
+      <button type="button" class="pal-item" data-type="dps_ac" draggable="true">
+        <img src="/quadro/img/dps.svg" alt=""> DPS AC II
+      </button>
+      <button type="button" class="pal-item" data-type="dps_dc" draggable="true">
+        <img src="/quadro/img/dps.svg" alt=""> DPS CC
+      </button>
+      <button type="button" class="pal-item" data-type="battery" draggable="true">
+        <img src="/quadro/img/battery.svg" alt=""> Banco de baterias
+      </button>
+      <button type="button" class="pal-item" data-type="inverter" draggable="true">
+        <img src="/quadro/img/inverter.svg" alt=""> Inversor
+      </button>
+      <button type="button" class="pal-item" data-type="panel" draggable="true">
+        <img src="/quadro/img/panel.svg" alt=""> String FV
+      </button>
+      <button type="button" class="pal-item" data-type="busbar" draggable="true">
+        <img src="/quadro/img/busbar.svg" alt=""> Barramento
+      </button>
+
+      <h2>Ferramentas</h2>
+      <div class="tools">
+        <button type="button" class="tool active" data-tool="select" title="Selecionar / mover">✥ Mover</button>
+        <button type="button" class="tool" data-tool="wire" title="Ligar cabos entre bornes">⌁ Cabo</button>
+        <button type="button" class="tool" data-tool="delete" title="Apagar peça ou cabo">⌫ Apagar</button>
       </div>
-      <div class="head-actions">
-        <a class="ghost" href="/">← Voltar à calculadora</a>
-        <button type="button" class="primary" id="btn-print">Imprimir / PDF</button>
+      <label class="wire-color">Cor do cabo
+        <select id="wire-color">
+          <option value="#a16207">Fase (marrom)</option>
+          <option value="#3b82f6">Neutro (azul)</option>
+          <option value="#22c55e">PE (verde/amarelo)</option>
+          <option value="#ef4444">CC + (vermelho)</option>
+          <option value="#111827">CC − (preto)</option>
+        </select>
+      </label>
+
+      <h2>Demanda (NBR)</h2>
+      <label>Carga AC (W)<input id="load-w" type="number" value="350"></label>
+      <label>Dreno bateria (W)<input id="bat-draw" type="number" value="400"></label>
+      <label>Tensão banco (V)
+        <select id="bat-v"><option>12</option><option>24</option><option selected>48</option></select>
+      </label>
+      <label>AC (V)<select id="ac-v"><option>127</option><option selected>220</option></select></label>
+      <label>FV STC (W)<input id="stc-w" type="number" value="2300"></label>
+      <p class="hint" id="wire-hint">Modo mover. No modo Cabo, clique num borne e depois no outro.</p>
+    </aside>
+
+    <section class="stage-wrap">
+      <div id="stage" class="stage" tabindex="0">
+        <svg id="board-svg" xmlns="http://www.w3.org/2000/svg" width="1400" height="900">
+          <defs>
+            <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
+              <path d="M 24 0 L 0 0 0 24" fill="none" stroke="#dbe3ec" stroke-width="1"/>
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="#f1f5f9"/>
+          <rect width="100%" height="100%" fill="url(#grid)"/>
+          <rect class="din-rail" x="80" y="120" width="1240" height="28" rx="4" fill="#374151"/>
+          <text x="90" y="139" fill="#d1d5db" font-size="12" font-family="Segoe UI,Arial">Trilho DIN 35 mm</text>
+          <g id="wires"></g>
+          <g id="nodes"></g>
+          <path id="temp-wire" fill="none" stroke="#2d8cf0" stroke-width="3" stroke-dasharray="6 4" visibility="hidden"/>
+        </svg>
       </div>
-    </header>
-
-    <p class="disclaimer">Orientativo. Não substitui projeto elétrico, ART nem parecer da concessionária.</p>
-
-    <section class="demand cards" id="demand-cards">
-      <article><span>Carga AC</span><strong id="d-load">—</strong></article>
-      <article><span>Dreno na bateria</span><strong id="d-draw">—</strong></article>
-      <article><span>Pico FV (STC)</span><strong id="d-stc">—</strong></article>
-      <article><span>Tensão banco</span><strong id="d-batv">—</strong></article>
-    </section>
-
-    <section class="workspace">
-      <aside class="panel-form">
-        <h2>Demanda e comprimentos</h2>
-        <label>Carga AC (W)
-          <input id="load-w" type="number" min="0" step="10" value="350">
-        </label>
-        <label>Dreno bateria (W)
-          <input id="bat-draw" type="number" min="0" step="10" value="400">
-        </label>
-        <label>Tensão banco (V)
-          <select id="bat-v">
-            <option value="12">12 V</option>
-            <option value="24">24 V</option>
-            <option value="48" selected>48 V</option>
-          </select>
-        </label>
-        <label>Tensão AC (V)
-          <select id="ac-v">
-            <option value="127">127 V</option>
-            <option value="220" selected>220 V</option>
-          </select>
-        </label>
-        <label>Pico FV STC (W)
-          <input id="stc-w" type="number" min="0" step="50" value="2300">
-        </label>
-        <label>Cabo AC (m)
-          <input id="len-ac" type="number" min="1" step="1" value="15">
-        </label>
-        <label>Cabo bateria (m)
-          <input id="len-bat" type="number" min="0.5" step="0.5" value="2">
-        </label>
-        <label>Cabo FV (m)
-          <input id="len-pv" type="number" min="1" step="1" value="15">
-        </label>
-        <button type="button" class="primary" id="btn-size">Recalcular (norma)</button>
-
-        <h2>Circuito extra</h2>
-        <label>Nome
-          <input id="ex-name" type="text" value="Iluminação">
-        </label>
-        <label>Potência (W)
-          <input id="ex-w" type="number" min="0" step="50" value="200">
-        </label>
-        <label>Comprimento (m)
-          <input id="ex-len" type="number" min="1" step="1" value="12">
-        </label>
-        <button type="button" class="ghost" id="btn-add">+ Adicionar circuito</button>
-      </aside>
-
-      <div class="board-col">
-        <h2>Quadro ilustrado</h2>
-        <canvas id="board" width="920" height="640" aria-label="Ilustração do quadro de distribuição"></canvas>
-        <p class="hint" id="board-hint">Critério: Ib ≤ In ≤ Iz · cabos Cu PVC 70 °C (método B1 aproximado)</p>
-      </div>
-    </section>
-
-    <section class="tables">
-      <div>
-        <h2>Circuitos dimensionados</h2>
-        <div class="table-wrap">
-          <table id="ckt-table">
-            <thead>
-              <tr>
-                <th>Circuito</th>
-                <th>Ib</th>
-                <th>In</th>
-                <th>Cabo</th>
-                <th>Iz</th>
-                <th>ΔV</th>
-                <th>Regra</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
+      <div class="inspector" id="inspector">
+        <h2>Inspetor</h2>
+        <p class="hint" id="insp-empty">Seleccione um componente ou cabo.</p>
+        <div id="insp-body" hidden>
+          <p><strong id="insp-title"></strong></p>
+          <p id="insp-meta" class="hint"></p>
+          <label>Etiqueta<input id="insp-label" type="text"></label>
+          <label>In (A)<input id="insp-in" type="number"></label>
+          <label>Cabo (mm²)<input id="insp-mm2" type="number" step="0.5"></label>
+          <button type="button" class="ghost" id="insp-apply">Aplicar</button>
+          <button type="button" class="ghost danger" id="insp-delete">Remover</button>
         </div>
       </div>
-      <div>
-        <h2>Lista de materiais (BOM)</h2>
-        <div class="table-wrap">
-          <table id="bom-table">
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th>Qtd</th>
-                <th>Especificação</th>
-                <th>Circuito</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
     </section>
+  </div>
 
-    <section class="notes" id="notes"></section>
-  </main>
-  <script src="/quadro/quadro.js?v=1"></script>
+  <section class="tables">
+    <div>
+      <h2>Circuitos (norma)</h2>
+      <div class="table-wrap"><table id="ckt-table"><thead><tr><th>Circuito</th><th>Ib</th><th>In</th><th>Cabo</th><th>Iz</th><th>ΔV</th><th>Regra</th></tr></thead><tbody></tbody></table></div>
+    </div>
+    <div>
+      <h2>Ligações</h2>
+      <div class="table-wrap"><table id="wire-table"><thead><tr><th>De</th><th>Para</th><th>Cor</th><th>Bitola</th></tr></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <script src="/quadro/editor.js?v=2"></script>
 </body>
 </html>
