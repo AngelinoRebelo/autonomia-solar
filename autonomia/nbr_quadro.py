@@ -66,13 +66,18 @@ def size_circuit(ib: float, length_m: float, voltage_v: float, drop_max: float =
             }
             break
     ok = cable["ampacity"] >= breaker
+    rule = f"Ib {design:.1f} A ≤ In {breaker} A ≤ Iz {cable['ampacity']} A"
     return {
         **cable,
         "breakerA": breaker,
         "breakerCurve": curve,
         "breakerLabel": f"DJ {breaker} A curva {curve}",
         "ok": ok,
-        "rule": f"Ib {design:.1f} A ≤ In {breaker} A ≤ Iz {cable['ampacity']} A",
+        "rule": rule,
+        "guidance": (
+            f"Usar disjuntor In {breaker} A curva {curve} "
+            f"(Ib {design:.1f} A). Cabo mín. {cable['mm2']} mm² (Iz {cable['ampacity']} A)."
+        ),
     }
 
 
@@ -206,6 +211,7 @@ def build_board(
     ok = all(c.get("ok") for c in circuits)
     notes = [
         "Critério NBR 5410: Ib ≤ In ≤ Iz (corrente de projeto ≤ disjuntor ≤ ampacidade do cabo).",
+        "O quadro calcula Ib em cada circuito e indica o disjuntor In adequado (ex.: banco CC bateria→inversor).",
         "Ib = corrente de projeto do circuito (fator 1,25) — exibida em cada cabo do quadro.",
         "Queda de tensão: AC ≤ 2,5–4%; CC banco ≤ 1%; FV ≤ 2% (NBR 5410 / NBR 16690).",
         "Valores orientativos — não substituem projeto, ART nem o parecer da concessionária.",

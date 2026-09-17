@@ -194,13 +194,99 @@
 
   function nearestProduct(type, currentA) {
     const products = productsForType(type).filter((item) => item.currentA);
+    const need = Number(currentA || 0);
+    const exact = products.find((item) => item.currentA === need);
+    if (exact) return exact;
     return (
       products
-        .filter((item) => item.currentA >= Number(currentA || 0))
+        .filter((item) => item.currentA >= need)
         .sort((a, b) => a.currentA - b.currentA)[0] ||
       products.sort((a, b) => b.currentA - a.currentA)[0] ||
       null
     );
+  }
+
+  function connectedNodeIds(nodeId) {
+    const ids = new Set();
+    state.wires.forEach((w) => {
+      if (w.from.node === nodeId) ids.add(w.to.node);
+      if (w.to.node === nodeId) ids.add(w.from.node);
+    });
+    return ids;
+  }
+
+  function inferCircuitId(node) {
+    if (node.circuitId) return node.circuitId;
+    if (node.type === "battery" || node.type === "panel") {
+      return node.type === "battery" ? "bat-cc" : "pv-cc";
+    }
+    if (node.type === "breaker_dc") {
+      const linked = connectedNodeIds(node.id);
+      if ([...linked].some((id) => state.nodes.find((n) => n.id === id)?.type === "battery")) return "bat-cc";
+      if ([...linked].some((id) => state.nodes.find((n) => n.id === id)?.type === "panel")) return "pv-cc";
+      if ([...linked].some((id) => state.nodes.find((n) => n.id === id)?.type === "dps_dc")) return "pv-cc";
+    }
+    if (node.type === "breaker_ac") {
+      if (node.circuitId === "geral" || node.circuitId === "ac-carga") return node.circuitId;
+      const linked = connectedNodeIds(node.id);
+      if ([...linked].some((id) => state.nodes.find((n) => n.id === id)?.type === "inverter")) return "geral";
+      if ([...linked].some((id) => state.nodes.find((n) => n.id === id)?.type === "busbar")) return "ac-carga";
+      if ([...linked].some((id) => state.nodes.find((n) => n.id === id)?.type === "dr")) return "geral";
+    }
+    if (node.type === "dr" || node.type === "dps_ac") return "geral";
+    if (node.type === "dps_dc") return "pv-cc";
+    if (node.type === "busbar") return "ac-carga";
+    return null;
+  }
+
+  function circuitForNode(node) {
+    const id = inferCircuitId(node);
+    return id ? circuitById(state.boardData, id) : null;
+  }
+
+  function nbrStatusForBreaker(node) {
+    const ckt = circuitForNode(node);
+    if (!ckt || !node.type?.startsWith("breaker")) return null;
+    const product = productById(node.productId);
+    const placed = Number(product?.currentA || node.inA || 0);
+    const need = Number(ckt.breakerA || 0);
+    const ib = Number(ckt.designA || 0);
+    const ok = placed >= need && placed >= ib;
+    const exact = placed === need;
+    return {
+      circuitId: ckt.id,
+      ib,
+      need,
+      placed,
+      mm2: ckt.mm2,
+      ok,
+      exact,
+      product,
+      guidance: ckt.guidance || ckt.rule,
+      label: exact
+        ? `NBR OK · In ${need} A`
+        : ok
+          ? `NBR · In ${placed} A (≥ ${need} A)`
+          : `Trocar · use In ${need} A`,
+    };
+  }
+
+  function applyBreakerRecommendation(node, ckt, { forceProduct = true } = {}) {
+    if (!node || !ckt) return;
+    const type = node.type === "breaker_ac" ? "breaker_ac" : "breaker_dc";
+    node.circuitId = ckt.id;
+    node.designA = ckt.designA;
+    node.mm2 = ckt.mm2;
+    node.recommendedIn = ckt.breakerA;
+    node.inA = ckt.breakerA;
+    if (forceProduct && (type === node.type || node.type?.startsWith("breaker"))) {
+      const product = nearestProduct(node.type, ckt.breakerA);
+      if (product) {
+        node.productId = product.id;
+        node.label = product.name;
+        node.inA = product.currentA;
+      }
+    }
   }
 
   function productMeta(product) {
@@ -223,7 +309,7 @@
   }
 
   async function loadEquipmentDb() {
-    const response = await fetch("/quadro/equipment-db.json?v=4");
+    const response = await fetch("/quadro/equipment-db.json?v=5");
     if (!response.ok) throw new Error("Falha ao carregar banco de equipamentos");
     const data = await response.json();
     const electrical = data.items || [];
@@ -551,9 +637,11 @@
   function updateInspector() {
     const empty = $("insp-empty");
     const body = $("insp-body");
+    const guide = $("insp-nbr");
     if (!state.selected) {
       empty.hidden = false;
       body.hidden = true;
+      if (guide) guide.hidden = true;
       return;
     }
     empty.hidden = true;
@@ -562,6 +650,8 @@
       const n = state.nodes.find((x) => x.id === state.selected.id);
       if (!n) return;
       const product = productById(n.productId);
+      const status = nbrStatusForBreaker(n);
+      const ckt = circuitForNode(n);
       $("insp-title").textContent = n.label;
       $("insp-meta").textContent = (productMeta(product) || TYPES[n.type].label) + " · " + n.id;
       fillInspectorProducts(n.type, n.productId);
@@ -570,10 +660,24 @@
       $("insp-mm2").value = n.mm2 || "";
       $("insp-source").hidden = !product?.source;
       $("insp-source").href = product?.source || "#";
+      if (guide) {
+        if (status || ckt) {
+          guide.hidden = false;
+          guide.className = "insp-nbr " + (status ? (status.ok ? "ok" : "bad") : "info");
+          guide.innerHTML = status
+            ? `<strong>${status.label}</strong><br>Ib ${formatWireIb(status.ib)} A · In norma ${status.need} A · cabo ${String(status.mm2).replace(".", ",")} mm²<br><span class="hint">${status.guidance || ""}</span>`
+            : `<strong>Circuito ${ckt.name}</strong><br>Ib ${formatWireIb(ckt.designA)} A · ${ckt.breakerLabel}<br><span class="hint">${ckt.guidance || ckt.rule}</span>`;
+          $("insp-apply-nbr").hidden = !(n.type?.startsWith("breaker") && status && !status.exact);
+        } else {
+          guide.hidden = true;
+          $("insp-apply-nbr").hidden = true;
+        }
+      }
     } else if (state.selected.kind === "wire") {
       const w = state.wires.find((x) => x.id === state.selected.id);
       if (!w) return;
       const product = productById(w.productId);
+      const ckt = circuitById(state.boardData, w.circuitId);
       $("insp-title").textContent = w.label || "Cabo";
       $("insp-meta").textContent =
         (productMeta(product) ? productMeta(product) + " · " : "") +
@@ -587,6 +691,17 @@
       $("insp-mm2").value = w.mm2 || "";
       $("insp-source").hidden = !product?.source;
       $("insp-source").href = product?.source || "#";
+      if (guide) {
+        if (ckt) {
+          guide.hidden = false;
+          guide.className = "insp-nbr info";
+          guide.innerHTML = `<strong>${ckt.name}</strong><br>Ib ${formatWireIb(ckt.designA)} A · use ${ckt.breakerLabel} · cabo ${String(ckt.mm2).replace(".", ",")} mm²`;
+          $("insp-apply-nbr").hidden = true;
+        } else {
+          guide.hidden = true;
+          $("insp-apply-nbr").hidden = true;
+        }
+      }
     }
   }
 
@@ -609,21 +724,19 @@
 
   function shouldShowWireLabel(w, a, b) {
     const kind = a.term.kind || b.term.kind;
-    // Um rótulo por par de polos do mesmo circuito (evita 35,9 A · 35,9 A sobreposto).
-    if (kind === "dc-" || kind === "neutral") {
-      const twin = state.wires.find((other) => {
-        if (other.id === w.id) return false;
-        if ((other.circuitId || "") !== (w.circuitId || "")) return false;
-        if (Number(other.mm2) !== Number(w.mm2)) return false;
-        if (Number(other.designA) !== Number(w.designA)) return false;
-        const oa = findTerminal(other.from.node, other.from.term);
-        const ob = findTerminal(other.to.node, other.to.term);
-        if (!oa || !ob) return false;
-        const otherKind = oa.term.kind || ob.term.kind;
-        return otherKind === "dc+" || otherKind === "phase";
-      });
-      if (twin) return false;
-    }
+    // Um rótulo por par de polos do mesmo circuito (evita corrente duplicada sobreposta).
+    if (kind === "dc-" || kind === "neutral") return false;
+    if (kind === "pe") return false;
+    // Se houver outro cabo no mesmo trecho (mesmos nós), só o de id menor exibe.
+    const twin = state.wires.find((other) => {
+      if (other.id === w.id) return false;
+      if ((other.circuitId || "") !== (w.circuitId || "")) return false;
+      const sameEnds =
+        (other.from.node === w.from.node && other.to.node === w.to.node) ||
+        (other.from.node === w.to.node && other.to.node === w.from.node);
+      return sameEnds && other.id < w.id;
+    });
+    if (twin) return false;
     return Boolean(wireLabelText(w));
   }
 
@@ -789,7 +902,7 @@
           product.brand,
           product.model,
           node.type.startsWith("breaker")
-            ? `In: ${node.inA || product.currentA || "—"} A${product.poles ? ` · ${product.poles}P` : ""}`
+            ? `In: ${product.currentA || node.inA || "—"} A${product.poles ? ` · ${product.poles}P` : ""}`
             : product.powerW
               ? `${product.powerW} W`
               : product.currentA
@@ -816,8 +929,26 @@
       tag.setAttribute("font-size", "11");
       tag.setAttribute("font-weight", "600");
       tag.setAttribute("font-family", "Segoe UI,Arial");
-      tag.textContent = product ? `${product.brand} ${product.model}` : node.label + (node.inA ? ` ${node.inA}A` : "");
+      const nbr = nbrStatusForBreaker(node);
+      if (nbr) {
+        tag.textContent = nbr.label;
+        tag.setAttribute("fill", nbr.ok ? (nbr.exact ? "#15803d" : "#a16207") : "#b91c1c");
+      } else {
+        tag.textContent = product ? `${product.brand} ${product.model}` : node.label + (node.inA ? ` ${node.inA}A` : "");
+      }
       g.appendChild(tag);
+
+      if (nbr) {
+        const sub = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        sub.setAttribute("x", def.w / 2);
+        sub.setAttribute("y", def.h + 28);
+        sub.setAttribute("text-anchor", "middle");
+        sub.setAttribute("fill", "#64748b");
+        sub.setAttribute("font-size", "10");
+        sub.setAttribute("font-family", "Segoe UI,Arial");
+        sub.textContent = `Ib ${formatWireIb(nbr.ib)} A · cabo ${String(nbr.mm2).replace(".", ",")} mm²`;
+        g.appendChild(sub);
+      }
 
       def.terminals.forEach((term) => {
         const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
@@ -932,7 +1063,13 @@
     (data.circuits || []).forEach((c) => {
       const tr = document.createElement("tr");
       if (!c.ok) tr.className = "bad";
-      tr.innerHTML = `<td><strong>${c.name}</strong></td><td>${c.designA} A</td><td>${c.breakerLabel}</td>
+      const kind = c.kind === "dc" ? "breaker_dc" : "breaker_ac";
+      const product = nearestProduct(kind, c.breakerA);
+      const productHint = product
+        ? `${product.brand} ${product.model} (${product.currentA} A)`
+        : c.breakerLabel;
+      tr.innerHTML = `<td><strong>${c.name}</strong></td><td>${c.designA} A</td>
+        <td>${c.breakerLabel}<div class="hint">Sugestão: ${productHint}</div></td>
         <td>${c.mm2} mm²</td><td>${c.ampacity} A</td><td>${c.dropPct}%</td><td>${c.rule}</td>`;
       tb.appendChild(tr);
     });
@@ -953,56 +1090,87 @@
     renderNormTable(state.boardData);
     if (rebuild || state.nodes.length === 0) seedFromBoard(state.boardData);
     else {
+      assignCircuitsFromTopology();
       applySizesToNodes(state.boardData);
       syncWiresFromBoard(state.boardData);
     }
     render();
+    setHint("Dimensionado NBR: correntes Ib e disjuntores In atualizados em todos os circuitos.");
   }
 
   function circuitById(data, id) {
     return (data?.circuits || []).find((c) => c.id === id) || null;
   }
 
+  function assignCircuitsFromTopology() {
+    state.nodes.forEach((n) => {
+      const inferred = inferCircuitId(n);
+      if (inferred) n.circuitId = inferred;
+    });
+    state.wires.forEach((w) => {
+      if (w.circuitId) return;
+      const from = state.nodes.find((n) => n.id === w.from.node);
+      const to = state.nodes.find((n) => n.id === w.to.node);
+      w.circuitId = from?.circuitId || to?.circuitId || null;
+    });
+  }
+
   function syncWiresFromBoard(data) {
     state.wires.forEach((w) => {
       const from = state.nodes.find((n) => n.id === w.from.node);
       const to = state.nodes.find((n) => n.id === w.to.node);
-      const circuitId = w.circuitId || from?.circuitId || to?.circuitId;
+      const circuitId = w.circuitId || from?.circuitId || to?.circuitId || inferCircuitId(from || {}) || inferCircuitId(to || {});
       const ckt = circuitById(data, circuitId);
       if (!ckt) return;
+      w.circuitId = ckt.id;
+      w.designA = ckt.designA;
       if (w.color !== PE_GREEN && !productById(w.productId)?.protectiveEarth) {
         w.mm2 = ckt.mm2;
-        w.designA = ckt.designA;
-        w.circuitId = ckt.id;
-      } else {
-        w.designA = ckt.designA;
-        w.circuitId = ckt.id;
+        const cable = cableProductFor(ckt.mm2, false);
+        if (cable) {
+          w.productId = cable.id;
+          w.label = cable.name;
+        }
       }
     });
   }
 
   function applySizesToNodes(data) {
-    const map = {
-      geral: (c) => ({ inA: c.breakerA, mm2: c.mm2, designA: c.designA }),
-      "ac-carga": (c) => ({ inA: c.breakerA, mm2: c.mm2, designA: c.designA }),
-      "bat-cc": (c) => ({ inA: c.breakerA, mm2: c.mm2, designA: c.designA }),
-      "pv-cc": (c) => ({ inA: c.breakerA, mm2: c.mm2, designA: c.designA }),
-    };
+    const breakerTypes = new Set(["breaker_ac", "breaker_dc"]);
     data.circuits.forEach((c) => {
-      const fn = map[c.id];
-      if (!fn) return;
-      const node = state.nodes.find((n) => n.circuitId === c.id);
-      if (node) {
-        Object.assign(node, fn(c));
-        if (node.type === "breaker_ac" || node.type === "breaker_dc") {
-          const product = nearestProduct(node.type, c.breakerA);
-          if (product) {
-            node.productId = product.id;
-            node.label = product.name;
-          }
+      const targets = state.nodes.filter((n) => {
+        const cid = n.circuitId || inferCircuitId(n);
+        return cid === c.id;
+      });
+      targets.forEach((node) => {
+        node.circuitId = c.id;
+        node.designA = c.designA;
+        node.mm2 = c.mm2;
+        node.recommendedIn = c.breakerA;
+        if (breakerTypes.has(node.type)) {
+          applyBreakerRecommendation(node, c, { forceProduct: true });
+        } else if (node.type === "dr" && c.id === "geral") {
+          node.inA = Math.max(Number(node.inA || 0), c.breakerA);
         }
+      });
+
+      // Garante pelo menos um disjuntor do circuito recebe o produto recomendado.
+      if (!targets.some((n) => breakerTypes.has(n.type))) {
+        const fallbackType = c.kind === "dc" ? "breaker_dc" : "breaker_ac";
+        const orphan = state.nodes.find((n) => n.type === fallbackType && !n.circuitId);
+        if (orphan) applyBreakerRecommendation(orphan, c, { forceProduct: true });
       }
     });
+
+    const inv = state.nodes.find((n) => n.type === "inverter");
+    if (inv) {
+      const bat = circuitById(data, "bat-cc");
+      const ac = circuitById(data, "ac-carga") || circuitById(data, "geral");
+      inv.designADc = bat?.designA ?? null;
+      inv.designAAc = ac?.designA ?? null;
+      inv.designA = ac?.designA ?? bat?.designA ?? inv.designA;
+      inv.mm2 = ac?.mm2 ?? inv.mm2;
+    }
   }
 
   function seedFromBoard(data) {
@@ -1052,6 +1220,8 @@
       label: "Inversor",
       mm2: ck["ac-carga"]?.mm2,
       designA: ck["ac-carga"]?.designA,
+      designADc: ck["bat-cc"]?.designA,
+      designAAc: ck["ac-carga"]?.designA,
     });
     byId.dj_geral = addNode("breaker_ac", 760, 160, {
       ...productExtra("breaker_ac", ck.geral?.breakerA || 16),
@@ -1260,6 +1430,17 @@
       }
       render();
       updateInspector();
+    });
+    $("insp-apply-nbr").addEventListener("click", () => {
+      if (!state.selected || state.selected.kind !== "node") return;
+      const n = state.nodes.find((x) => x.id === state.selected.id);
+      if (!n?.type?.startsWith("breaker")) return;
+      const ckt = circuitForNode(n);
+      if (!ckt) return;
+      applyBreakerRecommendation(n, ckt, { forceProduct: true });
+      render();
+      updateInspector();
+      setHint(`Aplicado ${ckt.breakerLabel} no circuito ${ckt.name} (Ib ${formatWireIb(ckt.designA)} A).`);
     });
     $("insp-product").addEventListener("change", () => {
       const product = productById($("insp-product").value);

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Quadro Pro — Montagem Elétrica Interativa</title>
-  <link rel="stylesheet" href="/quadro/quadro.css?v=5">
+  <link rel="stylesheet" href="/quadro/quadro.css?v=6">
 </head>
 <body class="editor-page">
   <header class="topbar">
@@ -103,6 +103,8 @@
         <div id="insp-body" hidden>
           <p><strong id="insp-title"></strong></p>
           <p id="insp-meta" class="hint"></p>
+          <div id="insp-nbr" class="insp-nbr" hidden></div>
+          <button type="button" class="ghost" id="insp-apply-nbr" hidden>Aplicar disjuntor recomendado</button>
           <label>Trocar item
             <select id="insp-product"></select>
           </label>
@@ -128,6 +130,6 @@
     </div>
   </section>
 
-  <script src="/quadro/editor.js?v=8"></script>
+  <script src="/quadro/editor.js?v=9"></script>
 </body>
 </html>
