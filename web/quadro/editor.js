@@ -91,6 +91,21 @@
         { id: "ac_n", x: 116, y: 70, kind: "neutral", name: "AC N" },
       ],
     },
+    charge_controller: {
+      label: "Controlador MPPT",
+      img: "/quadro/img/mppt-controller.png",
+      w: 130,
+      h: 150,
+      terminals: [
+        { id: "pv_pos", x: 22, y: 2, kind: "dc+", name: "PV+" },
+        { id: "pv_neg", x: 42, y: 2, kind: "dc-", name: "PV−" },
+        { id: "bat_pos", x: 22, y: 148, kind: "dc+", name: "BAT+" },
+        { id: "bat_neg", x: 42, y: 148, kind: "dc-", name: "BAT−" },
+        { id: "load_pos", x: 88, y: 148, kind: "dc+", name: "LOAD+" },
+        { id: "load_neg", x: 108, y: 148, kind: "dc-", name: "LOAD−" },
+        { id: "pe", x: 108, y: 2, kind: "pe", name: "Terra / PE" },
+      ],
+    },
     panel: {
       label: "String FV",
       img: "/quadro/img/panel.svg",
@@ -127,7 +142,6 @@
   const PE_GREEN = KIND_COLOR.pe;
 
   const state = {
-    tool: "select",
     nodes: [],
     wires: [],
     selected: null,
@@ -207,7 +221,7 @@
   }
 
   async function loadEquipmentDb() {
-    const response = await fetch("/quadro/equipment-db.json?v=2");
+    const response = await fetch("/quadro/equipment-db.json?v=3");
     if (!response.ok) throw new Error("Falha ao carregar banco de equipamentos");
     const data = await response.json();
     state.equipment = data.items || [];
@@ -380,18 +394,14 @@
     return pt.matrixTransform(ctm);
   }
 
-  function setTool(tool) {
-    state.tool = tool;
+  function setHint(text) {
+    $("wire-hint").textContent = text;
+  }
+
+  function clearTransientWire() {
     state.wireFrom = null;
     state.reconnect = null;
     tempWire.setAttribute("visibility", "hidden");
-    document.querySelectorAll(".tool").forEach((b) => b.classList.toggle("active", b.dataset.tool === tool));
-    $("wire-hint").textContent =
-      tool === "wire"
-        ? "Modo cabo: clique num borne e depois no destino. Esc cancela."
-        : tool === "delete"
-          ? "Modo apagar: clique numa peça ou num cabo."
-          : "Modo mover: arraste peças. Clique para inspecionar.";
   }
 
   function select(sel) {
@@ -507,12 +517,8 @@
       path.style.cursor = "pointer";
       path.addEventListener("mousedown", (e) => {
         e.stopPropagation();
-        if (state.tool === "delete") {
-          state.wires = state.wires.filter((x) => x.id !== w.id);
-          select(null);
-          return;
-        }
         select({ kind: "wire", id: w.id });
+        setHint("Cabo selecionado. Clique numa ponta para reconectar, ou Delete para remover.");
       });
       wiresG.appendChild(path);
       if (w.mm2) {
@@ -549,9 +555,11 @@
             const fixed = findTerminal(w[fixedEnd].node, w[fixedEnd].term);
             state.reconnect = { wireId: w.id, end };
             state.wireFrom = null;
+            state.drag = null;
             tempWire.setAttribute("visibility", "visible");
             tempWire.setAttribute("d", `M ${fixed.world.x} ${fixed.world.y} L ${point.x} ${point.y}`);
-            $("wire-hint").textContent = "Reconectando cabo: clique no novo borne.";
+            setHint("Ponta do cabo no mouse. Clique no novo borne/polo ou Esc para cancelar.");
+            updateInspector();
             render();
           });
           wiresG.appendChild(handle);
@@ -564,7 +572,7 @@
       const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
       g.setAttribute("transform", `translate(${node.x},${node.y})`);
       g.dataset.nodeId = node.id;
-      g.style.cursor = state.tool === "select" ? "grab" : "pointer";
+      g.style.cursor = "grab";
 
       if (state.selected && state.selected.kind === "node" && state.selected.id === node.id) {
         const halo = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -589,12 +597,12 @@
       img.setAttribute("preserveAspectRatio", "xMidYMid meet");
       g.appendChild(img);
 
-      if (product && node.type.startsWith("breaker") && /\.png(?:$|\?)/i.test(imageHref)) {
+      if (product && (node.type.startsWith("breaker") || node.type === "charge_controller" || node.type === "inverter") && /\.png(?:$|\?)/i.test(imageHref)) {
         const plate = document.createElementNS("http://www.w3.org/2000/svg", "rect");
         plate.setAttribute("x", 7);
-        plate.setAttribute("y", 27);
+        plate.setAttribute("y", node.type === "inverter" ? 8 : 27);
         plate.setAttribute("width", def.w - 14);
-        plate.setAttribute("height", 45);
+        plate.setAttribute("height", node.type === "charge_controller" ? 52 : 45);
         plate.setAttribute("rx", 2);
         plate.setAttribute("fill", "#f8fafc");
         plate.setAttribute("fill-opacity", "0.96");
@@ -604,7 +612,7 @@
 
         const specs = document.createElementNS("http://www.w3.org/2000/svg", "text");
         specs.setAttribute("x", def.w / 2);
-        specs.setAttribute("y", 35);
+        specs.setAttribute("y", node.type === "inverter" ? 16 : 35);
         specs.setAttribute("text-anchor", "middle");
         specs.setAttribute("fill", "#111827");
         specs.setAttribute("font-family", "Arial,sans-serif");
@@ -613,8 +621,14 @@
         const lines = [
           product.brand,
           product.model,
-          `In: ${node.inA || product.currentA || "—"} A${product.poles ? ` · ${product.poles}P` : ""}`,
-          product.voltage || "",
+          node.type.startsWith("breaker")
+            ? `In: ${node.inA || product.currentA || "—"} A${product.poles ? ` · ${product.poles}P` : ""}`
+            : product.powerW
+              ? `${product.powerW} W`
+              : product.currentA
+                ? `${product.currentA} A`
+                : "",
+          product.voltage || (product.voltageV ? `${product.voltageV} V` : ""),
           product.breakingCapacityKa ? `Icu: ${product.breakingCapacityKa} kA` : "",
         ].filter(Boolean);
         lines.forEach((line, index) => {
@@ -642,7 +656,7 @@
         const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
         c.setAttribute("cx", term.x);
         c.setAttribute("cy", term.y);
-        c.setAttribute("r", state.tool === "wire" ? 7 : 5);
+        c.setAttribute("r", state.reconnect || state.wireFrom ? 7 : 5.5);
         c.setAttribute("fill", KIND_COLOR[term.kind] || "#64748b");
         c.setAttribute("stroke", "#fff");
         c.setAttribute("stroke-width", "1.5");
@@ -659,17 +673,11 @@
       g.addEventListener("mousedown", (e) => {
         if (e.target.closest("circle")) return;
         e.stopPropagation();
-        if (state.tool === "delete") {
-          state.wires = state.wires.filter((w) => w.from.node !== node.id && w.to.node !== node.id);
-          state.nodes = state.nodes.filter((n) => n.id !== node.id);
-          select(null);
-          return;
-        }
-        if (state.tool === "select") {
-          select({ kind: "node", id: node.id });
-          const p = svgPoint(e);
-          state.drag = { id: node.id, ox: p.x - node.x, oy: p.y - node.y };
-        }
+        if (state.reconnect || state.wireFrom) return;
+        select({ kind: "node", id: node.id });
+        const p = svgPoint(e);
+        state.drag = { id: node.id, ox: p.x - node.x, oy: p.y - node.y };
+        setHint("Peça selecionada. Arraste para mover ou use Trocar item no inspetor.");
       });
 
       nodesG.appendChild(g);
@@ -687,28 +695,25 @@
       }
       state.reconnect = null;
       tempWire.setAttribute("visibility", "hidden");
-      $("wire-hint").textContent = "Cabo reconectado. Clique numa ponta para alterar novamente.";
+      setHint("Cabo reconectado. Clique numa ponta para alterar novamente.");
       render();
       updateInspector();
-      return;
-    }
-    if (state.tool !== "wire") {
-      select({ kind: "node", id: nodeId });
       return;
     }
     const hit = findTerminal(nodeId, termId);
     if (!hit) return;
     if (!state.wireFrom) {
       state.wireFrom = { node: nodeId, term: termId };
+      state.drag = null;
       tempWire.setAttribute("visibility", "visible");
       const p = hit.world;
       tempWire.setAttribute("d", `M ${p.x} ${p.y} L ${p.x} ${p.y}`);
-      $("wire-hint").textContent = "Bornes: origem marcada. Clique no borne de destino.";
+      setHint("Início do cabo no mouse. Clique no borne de destino.");
       return;
     }
     if (state.wireFrom.node === nodeId && state.wireFrom.term === termId) {
-      state.wireFrom = null;
-      tempWire.setAttribute("visibility", "hidden");
+      clearTransientWire();
+      setHint("Ligação cancelada.");
       return;
     }
     const fromHit = findTerminal(state.wireFrom.node, state.wireFrom.term);
@@ -729,8 +734,8 @@
       productId: cableProduct?.id || null,
       label: cableProduct?.name || "Cabo",
     });
-    state.wireFrom = null;
-    tempWire.setAttribute("visibility", "hidden");
+    clearTransientWire();
+    setHint("Cabo ligado. Clique numa ponta para mover a conexão.");
     render();
   }
 
@@ -905,7 +910,7 @@
     if (inverter && dj_geral) {
       wire(inverter, "ac_l", dj_geral, "L_in", "#a16207", dj_geral.mm2);
       wire(inverter, "ac_n", dj_geral, "N_in", "#3b82f6", dj_geral.mm2);
-      wire(inverter, "pe", dps_ac || dj_geral, dps_ac ? "PE" : "N_out", "#22c55e");
+      wire(inverter, "pe", dps_ac || dj_geral, dps_ac ? "PE" : "N_out", PE_GREEN);
     }
     if (dj_geral && dr) {
       wire(dj_geral, "L_out", dr, "L_in", "#a16207", dj_geral.mm2);
@@ -924,7 +929,6 @@
   }
 
   function bind() {
-    document.querySelectorAll(".tool").forEach((b) => b.addEventListener("click", () => setTool(b.dataset.tool)));
     $("library-search").addEventListener("input", renderLibrary);
     $("library-category").addEventListener("change", renderLibrary);
     $("wire-product").addEventListener("change", () => selectCableProduct($("wire-product").value));
@@ -946,7 +950,7 @@
 
     svg.addEventListener("mousemove", (e) => {
       const p = svgPoint(e);
-      if (state.drag) {
+      if (state.drag && !state.reconnect && !state.wireFrom) {
         const n = state.nodes.find((x) => x.id === state.drag.id);
         if (n) {
           n.x = Math.round(p.x - state.drag.ox);
@@ -962,9 +966,9 @@
         }
       }
       if (state.reconnect) {
-        const wire = state.wires.find((item) => item.id === state.reconnect.wireId);
+        const wireItem = state.wires.find((item) => item.id === state.reconnect.wireId);
         const fixedEnd = state.reconnect.end === "from" ? "to" : "from";
-        const fixed = wire && findTerminal(wire[fixedEnd].node, wire[fixedEnd].term);
+        const fixed = wireItem && findTerminal(wireItem[fixedEnd].node, wireItem[fixedEnd].term);
         if (fixed) {
           tempWire.setAttribute("visibility", "visible");
           tempWire.setAttribute("d", `M ${fixed.world.x} ${fixed.world.y} L ${p.x} ${p.y}`);
@@ -975,16 +979,17 @@
       state.drag = null;
     });
     svg.addEventListener("mousedown", () => {
-      if (state.tool === "select") select(null);
+      if (!state.reconnect && !state.wireFrom) select(null);
     });
     window.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
-        state.wireFrom = null;
-        state.reconnect = null;
-        tempWire.setAttribute("visibility", "hidden");
+        clearTransientWire();
+        setHint("Clique numa peça para mover. Clique no cabo para selecionar. Clique numa ponta para reconectar.");
         render();
       }
       if ((e.key === "Delete" || e.key === "Backspace") && state.selected) {
+        const tag = (e.target && e.target.tagName) || "";
+        if (/INPUT|TEXTAREA|SELECT/.test(tag)) return;
         if (state.selected.kind === "node") {
           const id = state.selected.id;
           state.wires = state.wires.filter((w) => w.from.node !== id && w.to.node !== id);
@@ -1049,7 +1054,7 @@
   async function init() {
     fillDemandForm(readParams());
     bind();
-    setTool("select");
+    setHint("Clique numa peça para mover. Clique no cabo para selecionar. Clique numa ponta para reconectar.");
     try {
       await loadEquipmentDb();
     } catch (error) {

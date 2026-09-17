@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Quadro Pro — Montagem Elétrica Interativa</title>
-  <link rel="stylesheet" href="/quadro/quadro.css?v=4">
+  <link rel="stylesheet" href="/quadro/quadro.css?v=5">
 </head>
 <body class="editor-page">
   <header class="topbar">
@@ -43,19 +43,16 @@
         <option value="residual">DR / diferencial</option>
         <option value="surge">DPS / proteção FV</option>
         <option value="batteries">Baterias</option>
+        <option value="controllers">Controladores de carga</option>
+        <option value="inverters">Inversores</option>
         <option value="cables">Cabos</option>
-        <option value="power">Inversores / FV</option>
+        <option value="power">Módulos FV / acessórios</option>
         <option value="accessories">Barramentos / acessórios</option>
       </select>
       <div id="library-list" class="library-list" aria-live="polite"></div>
 
-      <h2>Ferramentas</h2>
-      <div class="tools">
-        <button type="button" class="tool active" data-tool="select" title="Selecionar / mover">✥ Mover</button>
-        <button type="button" class="tool" data-tool="wire" title="Ligar cabos entre bornes">⌁ Cabo</button>
-        <button type="button" class="tool" data-tool="delete" title="Apagar peça ou cabo">⌫ Apagar</button>
-      </div>
-      <label class="wire-color">Cor do cabo
+      <h2>Cabos</h2>
+      <label class="wire-color">Cor preferencial
         <select id="wire-color">
           <option value="#a16207">Fase (marrom)</option>
           <option value="#3b82f6">Neutro (azul)</option>
@@ -67,6 +64,7 @@
       <label>Modelo de cabo
         <select id="wire-product"></select>
       </label>
+      <p class="hint" id="wire-hint">Clique numa peça para mover. Clique no cabo para selecionar. Clique numa ponta para levar a outro borne. Delete remove o item selecionado.</p>
 
       <h2>Demanda (NBR)</h2>
       <label>Carga AC (W)<input id="load-w" type="number" value="350"></label>
@@ -76,7 +74,6 @@
       </label>
       <label>AC (V)<select id="ac-v"><option>127</option><option selected>220</option></select></label>
       <label>FV STC (W)<input id="stc-w" type="number" value="2300"></label>
-      <p class="hint" id="wire-hint">Modo mover. No modo Cabo, clique num borne e depois no outro.</p>
     </aside>
 
     <section class="stage-wrap">
@@ -127,6 +124,6 @@
     </div>
   </section>
 
-  <script src="/quadro/editor.js?v=4"></script>
+  <script src="/quadro/editor.js?v=5"></script>
 </body>
 </html>
