@@ -151,11 +151,43 @@
     boardData: null,
     equipment: [],
     cableProductId: null,
+    selection: {
+      battery_id: null,
+      inverter_id: null,
+      panel_id: null,
+      panel_count: 1,
+    },
     uid: 1,
   };
 
   function uid(prefix) {
     return prefix + "-" + state.uid++;
+  }
+
+  function nominalBatteryV(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n) || n <= 0) return 48;
+    if (n <= 18) return 12;
+    if (n <= 36) return 24;
+    return 48;
+  }
+
+  function colorForTerminalKind(kind) {
+    return KIND_COLOR[kind] || null;
+  }
+
+  function enforceWirePolarityColor(wire) {
+    if (!wire) return;
+    const from = findTerminal(wire.from.node, wire.from.term);
+    const to = findTerminal(wire.to.node, wire.to.term);
+    if (!from || !to) return;
+    if (from.term.kind === "pe" || to.term.kind === "pe") {
+      wire.color = PE_GREEN;
+      return;
+    }
+    const kind = from.term.kind || to.term.kind;
+    const color = colorForTerminalKind(kind);
+    if (color) wire.color = color;
   }
 
   function productById(id) {
@@ -309,7 +341,7 @@
   }
 
   async function loadEquipmentDb() {
-    const response = await fetch("/quadro/equipment-db.json?v=6");
+    const response = await fetch("/quadro/equipment-db.json?v=7");
     if (!response.ok) throw new Error("Falha ao carregar banco de equipamentos");
     const data = await response.json();
     const electrical = data.items || [];
@@ -492,13 +524,19 @@
     const num = (k, fb) => {
       const v = q.get(k);
       if (v != null && v !== "") return Number(v);
-      if (src[k] != null) return Number(src[k]);
+      if (src[k] != null && src[k] !== "") return Number(src[k]);
       return fb;
     };
-    return {
+    const str = (k, fb = null) => {
+      const v = q.get(k);
+      if (v != null && v !== "") return v;
+      if (src[k] != null && src[k] !== "") return String(src[k]);
+      return fb;
+    };
+    const params = {
       load_w: num("load_w", 350),
       battery_draw_w: num("battery_draw_w", 400),
-      battery_v: num("battery_v", 48),
+      battery_v: nominalBatteryV(num("battery_v", 48)),
       ac_v: num("ac_v", 220),
       panel_stc_w: num("panel_stc_w", 2300),
       pv_v: num("pv_v", 80),
@@ -507,14 +545,26 @@
       cable_pv_m: num("cable_pv_m", 15),
       inverter_w: num("inverter_w", 0),
       inverter_eff_pct: num("inverter_eff_pct", 90),
+      battery_max_a: num("battery_max_a", 0),
+      battery_id: str("battery_id"),
+      inverter_id: str("inverter_id"),
+      panel_id: str("panel_id"),
+      panel_count: num("panel_count", 1),
       board: src.board || null,
     };
+    state.selection = {
+      battery_id: params.battery_id,
+      inverter_id: params.inverter_id,
+      panel_id: params.panel_id,
+      panel_count: params.panel_count,
+    };
+    return params;
   }
 
   function fillDemandForm(p) {
     $("load-w").value = Math.round(p.load_w);
     $("bat-draw").value = Math.round(p.battery_draw_w);
-    $("bat-v").value = String([12, 24, 48].includes(Number(p.battery_v)) ? p.battery_v : 48);
+    $("bat-v").value = String(nominalBatteryV(p.battery_v));
     const ac = Number(p.ac_v);
     $("ac-v").value = String([110, 127, 220].includes(ac) ? ac : 220);
     $("stc-w").value = Math.round(p.panel_stc_w);
@@ -528,6 +578,24 @@
 
   function demandFromPlacedEquipment(base) {
     const next = { ...base };
+    const batteries = state.nodes
+      .filter((n) => n.type === "battery")
+      .map((n) => productById(n.productId))
+      .filter(Boolean);
+    if (batteries.length) {
+      const volts = batteries.map((b) => Number(b.voltageV || b.voltage_v || 0)).filter((v) => v > 0);
+      if (volts.length) next.battery_v = nominalBatteryV(volts[0]);
+      const maxA = batteries
+        .map((b) => Number(b.maxCurrentA || b.max_current_a || 0))
+        .filter((a) => a > 0);
+      if (maxA.length) next.battery_max_a = Math.min(...maxA);
+      const maxW = batteries
+        .map((b) => Number(b.maxPowerW || b.max_power_w || 0))
+        .filter((w) => w > 0);
+      if (maxW.length) next.battery_max_w = Math.min(...maxW);
+      if (batteries[0].id) next.battery_id = batteries[0].id;
+    }
+
     const invNode = state.nodes.find((n) => n.type === "inverter");
     const inv = invNode ? productById(invNode.productId) : null;
     if (inv) {
@@ -539,26 +607,10 @@
         next.inverter_w = Math.max(Number(next.inverter_w) || 0, invW);
         next.load_w = Math.max(Number(next.load_w) || 0, invW);
       }
-      if (batV > 0) next.battery_v = batV;
+      if (!batteries.length && batV > 0) next.battery_v = nominalBatteryV(batV);
       if (acV > 0) next.ac_v = acV;
       if (eff > 0) next.inverter_eff_pct = eff;
-    }
-
-    const batteries = state.nodes
-      .filter((n) => n.type === "battery")
-      .map((n) => productById(n.productId))
-      .filter(Boolean);
-    if (batteries.length) {
-      const volts = batteries.map((b) => Number(b.voltageV || b.voltage_v || 0)).filter((v) => v > 0);
-      if (volts.length) next.battery_v = volts[0];
-      const maxA = batteries
-        .map((b) => Number(b.maxCurrentA || b.max_current_a || 0))
-        .filter((a) => a > 0);
-      if (maxA.length) next.battery_max_a = Math.min(...maxA);
-      const maxW = batteries
-        .map((b) => Number(b.maxPowerW || b.max_power_w || 0))
-        .filter((w) => w > 0);
-      if (maxW.length) next.battery_max_w = Math.min(...maxW);
+      if (inv.id) next.inverter_id = inv.id;
     }
 
     const panels = state.nodes
@@ -568,6 +620,7 @@
     if (panels.length) {
       const stc = panels.reduce((sum, p) => sum + (Number(p.powerW || p.wp || 0) || 0), 0);
       if (stc > 0) next.panel_stc_w = Math.max(Number(next.panel_stc_w) || 0, stc);
+      if (panels[0].id) next.panel_id = panels[0].id;
     }
 
     const mppt = state.nodes
@@ -579,6 +632,10 @@
       if (cur.length) next.mppt_a = Math.max(...cur);
     }
 
+    next.battery_v = nominalBatteryV(next.battery_v);
+    if (state.selection.battery_id && !next.battery_id) next.battery_id = state.selection.battery_id;
+    if (state.selection.inverter_id && !next.inverter_id) next.inverter_id = state.selection.inverter_id;
+    if (state.selection.panel_id && !next.panel_id) next.panel_id = state.selection.panel_id;
     return next;
   }
 
@@ -587,8 +644,8 @@
     if ($("inv-w") && data.inverter_w != null) $("inv-w").value = Math.round(data.inverter_w);
     if ($("inv-eff") && data.inverter_eff_pct != null) $("inv-eff").value = data.inverter_eff_pct;
     if ($("load-w") && data.load_w != null) $("load-w").value = Math.round(data.load_w);
-    if ($("bat-v") && data.battery_v != null && [12, 24, 48].includes(Number(data.battery_v))) {
-      $("bat-v").value = String(data.battery_v);
+    if ($("bat-v") && data.battery_v != null) {
+      $("bat-v").value = String(nominalBatteryV(data.battery_v));
     }
     if ($("ac-v") && data.ac_v != null && [110, 127, 220].includes(Number(data.ac_v))) {
       $("ac-v").value = String(data.ac_v);
@@ -600,7 +657,7 @@
     const base = {
       load_w: Number($("load-w").value) || 0,
       battery_draw_w: Number($("bat-draw").value) || 0,
-      battery_v: Number($("bat-v").value) || 48,
+      battery_v: nominalBatteryV(Number($("bat-v").value) || 48),
       ac_v: Number($("ac-v").value) || 220,
       panel_stc_w: Number($("stc-w").value) || 0,
       pv_v: Number($("pv-v")?.value) || 80,
@@ -609,9 +666,17 @@
       cable_pv_m: Number($("cable-pv-m")?.value) || 15,
       inverter_w: Number($("inv-w")?.value) || 0,
       inverter_eff_pct: Number($("inv-eff")?.value) || 90,
+      battery_id: state.selection.battery_id || "",
+      inverter_id: state.selection.inverter_id || "",
+      panel_id: state.selection.panel_id || "",
+      panel_count: state.selection.panel_count || 1,
+      battery_max_a: 0,
     };
     const data = demandFromPlacedEquipment(base);
     syncDemandFormFromPayload(data);
+    state.selection.battery_id = data.battery_id || state.selection.battery_id;
+    state.selection.inverter_id = data.inverter_id || state.selection.inverter_id;
+    state.selection.panel_id = data.panel_id || state.selection.panel_id;
     return data;
   }
 
@@ -713,8 +778,14 @@
       wire.productId = product.id;
       wire.label = product.name;
       wire.mm2 = product.sectionMm2 || wire.mm2;
-      if (product.colors?.length && !product.colors.includes(wire.color)) wire.color = product.colors[0];
+      if (product.colors?.length && !product.colors.includes(wire.color)) {
+        const from = findTerminal(wire.from.node, wire.from.term);
+        const to = findTerminal(wire.to.node, wire.to.term);
+        const kind = from?.term.kind || to?.term.kind;
+        if (!colorForTerminalKind(kind)) wire.color = product.colors[0];
+      }
       enforceProtectiveEarth(wire);
+      enforceWirePolarityColor(wire);
     }
     render();
     updateInspector();
@@ -881,6 +952,7 @@
 
     state.wires.forEach((w) => {
       enforceProtectiveEarth(w);
+      enforceWirePolarityColor(w);
       const a = findTerminal(w.from.node, w.from.term);
       const b = findTerminal(w.to.node, w.to.term);
       if (!a || !b) return;
@@ -1110,7 +1182,12 @@
     const cableProduct = protectiveEarth
       ? cableProductFor(selectedCable?.sectionMm2 || fromNode?.mm2 || hit.node.mm2, true)
       : selectedCable;
-    const color = protectiveEarth ? PE_GREEN : $("wire-color").value || KIND_COLOR[hit.term.kind] || "#a16207";
+    const polarity =
+      colorForTerminalKind(fromHit?.term.kind) ||
+      colorForTerminalKind(hit.term.kind) ||
+      $("wire-color").value ||
+      "#a16207";
+    const color = protectiveEarth ? PE_GREEN : polarity;
     const mm2 = cableProduct?.sectionMm2 || fromNode?.mm2 || hit.node.mm2 || null;
     const designA = fromNode?.designA != null ? fromNode.designA : hit.node.designA;
     const circuitId = fromNode?.circuitId || hit.node.circuitId || null;
@@ -1167,7 +1244,7 @@
     $("d-draw").textContent = Math.round(d.batteryDrawW || d.dcPowerW).toLocaleString("pt-BR") + " W";
     $("d-stc").textContent = Math.round(d.panelStcW).toLocaleString("pt-BR") + " W";
     $("d-batv").textContent =
-      d.batteryV +
+      nominalBatteryV(d.batteryV) +
       " V" +
       (d.inverterW ? ` · inv ${Math.round(d.inverterW)} W` : "") +
       (d.acV ? ` · AC ${d.acV} V` : "");
@@ -1285,31 +1362,57 @@
       const product = nearestProduct(type, currentA);
       return product ? { productId: product.id, label: product.name } : {};
     };
+    const resolveProduct = (id, fallback) => {
+      if (id) {
+        const exact =
+          productById(id) ||
+          state.equipment.find((p) => p.catalogId === id) ||
+          state.equipment.find((p) => p.id === id) ||
+          state.equipment.find((p) => String(p.id).endsWith(id) || String(p.catalogId || "").endsWith(id));
+        if (exact) return exact;
+      }
+      return typeof fallback === "function" ? fallback() : fallback;
+    };
     const matchInverter = () => {
       const wantW = Number(demand.inverterW || demand.acPowerW || 0);
-      const wantV = Number(demand.batteryV || 0);
+      const wantV = nominalBatteryV(demand.batteryV || 0);
       const wantAc = Number(demand.acV || 0);
       const list = productsForType("inverter").filter((p) => p.powerW);
       return (
         list.find(
           (p) =>
             Number(p.powerW) === wantW &&
-            (!wantV || Number(p.voltageV) === wantV) &&
+            (!wantV || nominalBatteryV(p.voltageV) === wantV) &&
             (!wantAc || Number(p.outputVac) === wantAc)
         ) ||
-        list.find((p) => Number(p.voltageV) === wantV && Number(p.powerW) >= wantW) ||
-        list.find((p) => Number(p.powerW) >= wantW) ||
+        list.find((p) => nominalBatteryV(p.voltageV) === wantV && Number(p.powerW) === wantW) ||
+        list.find((p) => nominalBatteryV(p.voltageV) === wantV && Number(p.powerW) >= wantW) ||
+        list.find((p) => Number(p.powerW) === wantW) ||
         null
       );
     };
     const matchBattery = () => {
-      const wantV = Number(demand.batteryV || 0);
+      const wantV = nominalBatteryV(demand.batteryV || 0);
       const list = productsForType("battery").filter((p) => p.voltageV);
-      return list.find((p) => Math.abs(Number(p.voltageV) - wantV) <= 2) || list[0] || null;
+      const sameV = list.filter((p) => nominalBatteryV(p.voltageV) === wantV);
+      return sameV[0] || list[0] || null;
+    };
+    const matchPanel = () => {
+      const list = productsForType("panel").filter((p) => p.powerW);
+      const want = Number(demand.panelStcW || 0);
+      const count = Math.max(1, Number(state.selection.panel_count) || 1);
+      const per = want / count;
+      return list.find((p) => Math.abs(Number(p.powerW) - per) < 1) || list[0] || null;
     };
 
+    const batProd = resolveProduct(state.selection.battery_id || demand.batteryId, matchBattery);
+    const invProd = resolveProduct(state.selection.inverter_id || demand.inverterId, matchInverter);
+    const panelProd = resolveProduct(state.selection.panel_id || demand.panelId, matchPanel);
+    const panelCount = Math.max(1, Number(state.selection.panel_count) || 1);
+
     byId.panel = addNode("panel", 100, 220, {
-      label: "String FV",
+      productId: panelProd?.id,
+      label: panelProd ? `${panelProd.name}${panelCount > 1 ? ` ×${panelCount}` : ""}` : "String FV",
       circuitId: "pv-cc",
       mm2: ck["pv-cc"]?.mm2,
       designA: ck["pv-cc"]?.designA,
@@ -1327,10 +1430,9 @@
       mm2: ck["pv-cc"]?.mm2,
       designA: ck["pv-cc"]?.designA,
     });
-    const batProd = matchBattery();
     byId.battery = addNode("battery", 100, 420, {
       productId: batProd?.id,
-      label: batProd?.name || `Banco ${demand.batteryV || 48}V`,
+      label: batProd?.name || `Banco ${nominalBatteryV(demand.batteryV) || 48}V`,
       circuitId: "bat-cc",
       mm2: ck["bat-cc"]?.mm2,
       designA: ck["bat-cc"]?.designA,
@@ -1342,7 +1444,6 @@
       mm2: ck["bat-cc"]?.mm2,
       designA: ck["bat-cc"]?.designA,
     });
-    const invProd = matchInverter();
     byId.inverter = addNode("inverter", 520, 400, {
       productId: invProd?.id,
       label: invProd?.name || "Inversor",
@@ -1396,11 +1497,13 @@
       designA != null ? designA : aNode.designA != null ? aNode.designA : bNode.designA;
     const resolvedCircuit = circuitId || aNode.circuitId || bNode.circuitId || null;
     const cable = cableProductFor(resolvedMm2, protectiveEarth) || productById(state.cableProductId);
+    const polarity =
+      colorForTerminalKind(from?.term.kind) || colorForTerminalKind(to?.term.kind) || color;
     state.wires.push({
       id: uid("w"),
       from: { node: aNode.id, term: aTerm },
       to: { node: bNode.id, term: bTerm },
-      color: protectiveEarth ? PE_GREEN : color,
+      color: protectiveEarth ? PE_GREEN : polarity,
       mm2: resolvedMm2,
       designA: resolvedDesignA != null ? resolvedDesignA : null,
       circuitId: resolvedCircuit,

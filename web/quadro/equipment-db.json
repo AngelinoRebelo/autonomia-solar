@@ -625,7 +625,8 @@
       "image": "/quadro/img/inverter.svg"
     },
     {
-      "id": "inverter-knup-kp587b",
+      "id": "knup-kp587b",
+      "catalogId": "knup-kp587b",
       "category": "inverters",
       "componentType": "inverter",
       "brand": "Knup",
@@ -635,6 +636,7 @@
       "powerW": 4000,
       "surgeW": 8000,
       "outputVac": 110,
+      "effPct": 90,
       "waveform": "Onda senoidal",
       "image": "/quadro/img/inverter-knup.png",
       "imageCredit": "Imagem fornecida pelo usuário"

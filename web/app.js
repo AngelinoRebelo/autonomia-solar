@@ -365,17 +365,19 @@ function bind() {
 function openQuadro() {
   const bat = currentBattery() || {};
   const inv = currentInverter() || {};
+  const panel = currentPanel() || {};
   const loadW = Number($("load").value) || 0;
   const drawW = last && last.battery_draw_w != null ? Number(last.battery_draw_w) : loadW;
+  const panelCount = Number($("panel-count").value) || 1;
   const stcW =
     last && last.pv && last.pv.stc_w != null
       ? Number(last.pv.stc_w)
-      : (Number($("panel-wp").value) || 0) * (Number($("panel-count").value) || 0);
-  const batV = Number(bat.voltage_v) || Number(inv.voltage_v) || 48;
+      : (Number($("panel-wp").value) || Number(panel.wp) || 0) * panelCount;
+  const rawBatV = Number(bat.voltage_v) || Number(inv.voltage_v) || 48;
+  const batV = rawBatV <= 18 ? 12 : rawBatV <= 36 ? 24 : 48;
   const invW = Number(inv.power_w || inv.continuous_w || inv.rated_w || 0) || 0;
   const acV = Number(inv.output_vac || inv.ac_v || inv.voltage_ac || 0) || 220;
   const invEff = Number($("inv-eff").value) || Number(inv.eff_pct) || 90;
-  // Vmp aproximada da string FV (sem Voc/Vmp no catálogo): ~1,6× tensão do banco, mín. 60 V.
   const pvV = Math.max(60, Math.round(batV * 1.6));
   const payload = {
     load_w: Math.max(loadW, invW),
@@ -389,14 +391,21 @@ function openQuadro() {
     cable_pv_m: 15,
     inverter_w: invW,
     inverter_eff_pct: invEff,
+    battery_id: bat.id || "",
+    inverter_id: inv.id || "",
+    panel_id: panel.id || "",
+    panel_count: panelCount,
+    battery_max_a: Number(bat.max_current_a) || 0,
   };
   const go = (board) => {
     try {
       sessionStorage.setItem("autonomia-quadro", JSON.stringify(board ? { ...payload, board } : payload));
     } catch (_) {}
-    const q = new URLSearchParams(
-      Object.fromEntries(Object.entries(payload).map(([k, v]) => [k, String(Math.round(v * 100) / 100)]))
-    );
+    const q = new URLSearchParams();
+    Object.entries(payload).forEach(([k, v]) => {
+      if (v == null || v === "") return;
+      q.set(k, typeof v === "number" ? String(Math.round(v * 100) / 100) : String(v));
+    });
     window.location.href = "/quadro/?" + q.toString();
   };
   fetch("/api/quadro", {

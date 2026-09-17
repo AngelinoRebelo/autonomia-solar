@@ -292,7 +292,7 @@ BUILTIN = {
             "voltage_v": 24,
             "output_vac": 110,
             "notes": "24 Vcc → 110 Vca · 4000 W contínuos · onda senoidal",
-            "image": "/img/inverters/knup-kp587b.png",
+            "image": "/quadro/img/inverter-knup.png",
             "product_url": "",
             "brand_url": "",
             "shop": "",
