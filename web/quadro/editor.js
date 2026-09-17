@@ -578,7 +578,7 @@
       $("insp-meta").textContent =
         (productMeta(product) ? productMeta(product) + " · " : "") +
         (w.designA != null
-          ? "Ib " + Number(w.designA).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " A · "
+          ? "Ib " + (formatWireIb(w.designA) || w.designA) + " A · "
           : "") +
         w.from.node + "." + w.from.term + " → " + w.to.node + "." + w.to.term;
       fillInspectorProducts("wire", w.productId);
@@ -588,6 +588,89 @@
       $("insp-source").hidden = !product?.source;
       $("insp-source").href = product?.source || "#";
     }
+  }
+
+  function formatWireIb(designA) {
+    if (designA == null || designA === "") return null;
+    const n = Number(designA);
+    if (!Number.isFinite(n)) return null;
+    return n.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+  }
+
+  function wireLabelText(w) {
+    const parts = [];
+    if (w.mm2) {
+      parts.push(Number(w.mm2).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " mm²");
+    }
+    const ib = formatWireIb(w.designA);
+    if (ib) parts.push("Ib " + ib + " A");
+    return parts.join(" · ");
+  }
+
+  function shouldShowWireLabel(w, a, b) {
+    const kind = a.term.kind || b.term.kind;
+    // Um rótulo por par de polos do mesmo circuito (evita 35,9 A · 35,9 A sobreposto).
+    if (kind === "dc-" || kind === "neutral") {
+      const twin = state.wires.find((other) => {
+        if (other.id === w.id) return false;
+        if ((other.circuitId || "") !== (w.circuitId || "")) return false;
+        if (Number(other.mm2) !== Number(w.mm2)) return false;
+        if (Number(other.designA) !== Number(w.designA)) return false;
+        const oa = findTerminal(other.from.node, other.from.term);
+        const ob = findTerminal(other.to.node, other.to.term);
+        if (!oa || !ob) return false;
+        const otherKind = oa.term.kind || ob.term.kind;
+        return otherKind === "dc+" || otherKind === "phase";
+      });
+      if (twin) return false;
+    }
+    return Boolean(wireLabelText(w));
+  }
+
+  function drawWireLabel(w, a, b) {
+    const label = wireLabelText(w);
+    if (!label || !shouldShowWireLabel(w, a, b)) return;
+    const midX = (a.world.x + b.world.x) / 2;
+    const midY = (a.world.y + b.world.y) / 2;
+    const dx = b.world.x - a.world.x;
+    const dy = b.world.y - a.world.y;
+    const len = Math.hypot(dx, dy) || 1;
+    // Desloca o rótulo perpendicular ao cabo para não cobrir a linha.
+    const offset = 14;
+    const lx = midX - (dy / len) * offset;
+    const ly = midY + (dx / len) * offset;
+
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    g.setAttribute("pointer-events", "none");
+
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("x", lx);
+    t.setAttribute("y", ly);
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("dominant-baseline", "middle");
+    t.setAttribute("fill", "#0f172a");
+    t.setAttribute("font-size", "11");
+    t.setAttribute("font-weight", "700");
+    t.setAttribute("font-family", "Segoe UI,Arial");
+    t.textContent = label;
+    g.appendChild(t);
+    wiresG.appendChild(g);
+
+    // Fundo calculado após medir o texto.
+    try {
+      const box = t.getBBox();
+      const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      bg.setAttribute("x", box.x - 5);
+      bg.setAttribute("y", box.y - 3);
+      bg.setAttribute("width", box.width + 10);
+      bg.setAttribute("height", box.height + 6);
+      bg.setAttribute("rx", 4);
+      bg.setAttribute("fill", "#ffffff");
+      bg.setAttribute("fill-opacity", "0.92");
+      bg.setAttribute("stroke", "#cbd5e1");
+      bg.setAttribute("stroke-width", "1");
+      g.insertBefore(bg, t);
+    } catch (_) {}
   }
 
   function render() {
@@ -615,21 +698,7 @@
         setHint("Cabo selecionado. Clique numa ponta para reconectar, ou Delete para remover.");
       });
       wiresG.appendChild(path);
-      if (w.mm2 || w.designA != null) {
-        const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        t.setAttribute("x", (a.world.x + b.world.x) / 2);
-        t.setAttribute("y", midY - 6);
-        t.setAttribute("text-anchor", "middle");
-        t.setAttribute("fill", "#334155");
-        t.setAttribute("font-size", "11");
-        t.setAttribute("font-weight", "600");
-        t.setAttribute("font-family", "Segoe UI,Arial");
-        const parts = [];
-        if (w.mm2) parts.push(w.mm2 + " mm²");
-        if (w.designA != null) parts.push(Number(w.designA).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " A");
-        t.textContent = parts.join(" · ");
-        wiresG.appendChild(t);
-      }
+      drawWireLabel(w, a, b);
       const wireSelected = state.selected?.kind === "wire" && state.selected.id === w.id;
       [
         { end: "from", point: a.world },
@@ -851,8 +920,8 @@
       tr.innerHTML = `<td>${a ? a.node.label + " · " + a.term.name : "?"}</td>
         <td>${b ? b.node.label + " · " + b.term.name : "?"}</td>
         <td><span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:${w.color}"></span></td>
-        <td>${w.mm2 ? w.mm2 + " mm²" : "—"}</td>
-        <td>${w.designA != null ? Number(w.designA).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " A" : "—"}</td>`;
+        <td>${w.mm2 ? String(w.mm2).replace(".", ",") + " mm²" : "—"}</td>
+        <td>${formatWireIb(w.designA) ? "Ib " + formatWireIb(w.designA) + " A" : "—"}</td>`;
       tb.appendChild(tr);
     });
   }
