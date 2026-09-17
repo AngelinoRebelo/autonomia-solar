@@ -364,25 +364,31 @@ function bind() {
 
 function openQuadro() {
   const bat = currentBattery() || {};
+  const inv = currentInverter() || {};
   const loadW = Number($("load").value) || 0;
   const drawW = last && last.battery_draw_w != null ? Number(last.battery_draw_w) : loadW;
   const stcW =
     last && last.pv && last.pv.stc_w != null
       ? Number(last.pv.stc_w)
       : (Number($("panel-wp").value) || 0) * (Number($("panel-count").value) || 0);
-  const batV = Number(bat.voltage_v) || 48;
+  const batV = Number(bat.voltage_v) || Number(inv.voltage_v) || 48;
+  const invW = Number(inv.power_w || inv.continuous_w || inv.rated_w || 0) || 0;
+  const acV = Number(inv.output_vac || inv.ac_v || inv.voltage_ac || 0) || 220;
+  const invEff = Number($("inv-eff").value) || Number(inv.eff_pct) || 90;
   // Vmp aproximada da string FV (sem Voc/Vmp no catálogo): ~1,6× tensão do banco, mín. 60 V.
   const pvV = Math.max(60, Math.round(batV * 1.6));
   const payload = {
-    load_w: loadW,
+    load_w: Math.max(loadW, invW),
     battery_draw_w: drawW,
     battery_v: batV,
-    ac_v: 220,
+    ac_v: acV,
     panel_stc_w: stcW,
     pv_v: pvV,
     cable_ac_m: 15,
     cable_bat_m: 2,
     cable_pv_m: 15,
+    inverter_w: invW,
+    inverter_eff_pct: invEff,
   };
   const go = (board) => {
     try {

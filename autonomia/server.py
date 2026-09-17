@@ -86,6 +86,9 @@ class Handler(SimpleHTTPRequestHandler):
                 cable_ac_m=f("cable_ac_m", 15),
                 cable_bat_m=f("cable_bat_m", 2),
                 cable_pv_m=f("cable_pv_m", 15),
+                inverter_w=f("inverter_w", 0),
+                inverter_eff_pct=f("inverter_eff_pct", 90),
+                battery_max_a=f("battery_max_a", 0),
             )
             self._json(data)
             return
@@ -117,6 +120,9 @@ class Handler(SimpleHTTPRequestHandler):
             cable_ac_m=float(body.get("cable_ac_m") or 15),
             cable_bat_m=float(body.get("cable_bat_m") or 2),
             cable_pv_m=float(body.get("cable_pv_m") or 15),
+            inverter_w=float(body.get("inverter_w") or 0),
+            inverter_eff_pct=float(body.get("inverter_eff_pct") or 90),
+            battery_max_a=float(body.get("battery_max_a") or 0),
             circuits_extra=body.get("circuits_extra") or [],
         )
         self._json(data)
