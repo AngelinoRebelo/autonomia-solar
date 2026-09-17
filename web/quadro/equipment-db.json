@@ -128,7 +128,7 @@
       "voltage": "500 Vcc",
       "breakingCapacityKa": 6,
       "standard": "IEC/EN 60947-2",
-      "image": "/quadro/img/breaker-dc.svg",
+      "image": "/quadro/img/breaker-dc-real.png",
       "source": "https://www.chintglobal.com/global/en/products/low-voltage/iec/final-power-distribution/nb1-63dc.html"
     },
     {
@@ -144,7 +144,7 @@
       "voltage": "500 Vcc",
       "breakingCapacityKa": 6,
       "standard": "IEC/EN 60947-2",
-      "image": "/quadro/img/breaker-dc.svg",
+      "image": "/quadro/img/breaker-dc-real.png",
       "source": "https://www.chintglobal.com/global/en/products/low-voltage/iec/final-power-distribution/nb1-63dc.html"
     },
     {
@@ -160,8 +160,24 @@
       "voltage": "1000 Vcc",
       "breakingCapacityKa": 6,
       "standard": "IEC/EN 60947-2",
-      "image": "/quadro/img/breaker-dc.svg",
+      "image": "/quadro/img/breaker-dc-real.png",
       "source": "https://www.chintglobal.com/content/dam/chint/global/product-center/low-voltage/iec/final-power-distribution/mccb/nb1-63dc/catalog/NB1-63DC-MCCB-Catalog.pdf"
+    },
+    {
+      "id": "dawx-tob7z63-dc20-2p",
+      "category": "breakers_dc",
+      "componentType": "breaker_dc",
+      "brand": "DAWX",
+      "model": "TOB7Z-63 DC20 2P",
+      "name": "Disjuntor CC DAWX TOB7Z-63 20 A 2P",
+      "poles": 2,
+      "currentA": 20,
+      "curve": "C",
+      "voltage": "1000 Vcc",
+      "breakingCapacityKa": 6,
+      "standard": "IEC/EN 60947-2",
+      "image": "/quadro/img/breaker-dc-real.png",
+      "imageCredit": "Imagem fornecida pelo usuário"
     },
     {
       "id": "deye-rwf10-builtin",
@@ -215,6 +231,25 @@
       "dpsClass": "I+II",
       "image": "/quadro/img/dps.svg",
       "source": "https://www.phoenixcontact.com/pt-br/produtos/kit-de-dispositivos-de-protecao-contra-surtos-pv-set-8st-1000-f-m-spd-sd-sc-2801202"
+    },
+    {
+      "id": "dps-tomzn-tov1-pv-400",
+      "category": "surge",
+      "componentType": "dps_dc",
+      "brand": "TOMZN",
+      "model": "TOV1-PV 2P",
+      "name": "DPS CC TOMZN TOV1-PV 2P 400 Vcc",
+      "poles": 2,
+      "voltage": "Uc 400 Vcc",
+      "nominalDischargeKa": 20,
+      "maxDischargeKa": 40,
+      "protectionLevelKv": 2,
+      "dpsClass": "T2",
+      "standard": "IEC/EN 61643-11",
+      "image": "/quadro/img/tomzn-tov1-pv.png",
+      "imageCredit": "Imagem fornecida pelo usuário",
+      "verificationNote": "A variante 400 Vcc consta na imagem fornecida; a página oficial atual lista 500/600/800/1000 Vcc. Confirmar o código antes da especificação.",
+      "source": "https://tomzn.com/product/tomzn-spd-dc-1000v-800v-600v-500v-10ka20ka-20ka40ka-house-surge-protector-protective-low-voltage-arrester-device-pv-obo/"
     },
     {
       "id": "fuse-phoenix-gpv-12a",
@@ -326,6 +361,51 @@
       "voltage": "450/750 V",
       "standard": "NBR NM 247-3 / NBR 5410",
       "colors": ["#a16207", "#3b82f6", "#22c55e"],
+      "image": "/quadro/img/cable.svg"
+    },
+    {
+      "id": "cable-pe-green-25",
+      "category": "cables",
+      "componentType": "wire",
+      "brand": "Genérico NBR",
+      "model": "PE verde 2,5 mm²",
+      "name": "Cabo de proteção/terra PE verde 2,5 mm²",
+      "sectionMm2": 2.5,
+      "ampacityA": 24,
+      "voltage": "450/750 V",
+      "protectiveEarth": true,
+      "standard": "NBR 5410 / NBR NM 247-3",
+      "colors": ["#16a34a"],
+      "image": "/quadro/img/cable.svg"
+    },
+    {
+      "id": "cable-pe-green-4",
+      "category": "cables",
+      "componentType": "wire",
+      "brand": "Genérico NBR",
+      "model": "PE verde 4 mm²",
+      "name": "Cabo de proteção/terra PE verde 4 mm²",
+      "sectionMm2": 4,
+      "ampacityA": 32,
+      "voltage": "450/750 V",
+      "protectiveEarth": true,
+      "standard": "NBR 5410 / NBR NM 247-3",
+      "colors": ["#16a34a"],
+      "image": "/quadro/img/cable.svg"
+    },
+    {
+      "id": "cable-pe-green-6",
+      "category": "cables",
+      "componentType": "wire",
+      "brand": "Genérico NBR",
+      "model": "PE verde 6 mm²",
+      "name": "Cabo de proteção/terra PE verde 6 mm²",
+      "sectionMm2": 6,
+      "ampacityA": 41,
+      "voltage": "450/750 V",
+      "protectiveEarth": true,
+      "standard": "NBR 5410 / NBR NM 247-3",
+      "colors": ["#16a34a"],
       "image": "/quadro/img/cable.svg"
     },
     {

@@ -64,8 +64,8 @@
       h: 140,
       terminals: [
         { id: "pos", x: 24, y: 2, kind: "dc+", name: "+" },
-        { id: "neg", x: 36, y: 2, kind: "dc-", name: "−" },
-        { id: "PE", x: 48, y: 2, kind: "pe", name: "PE" },
+        { id: "neg", x: 48, y: 2, kind: "dc-", name: "−" },
+        { id: "PE", x: 36, y: 138, kind: "pe", name: "Terra / PE" },
       ],
     },
     battery: {
@@ -120,10 +120,11 @@
   const KIND_COLOR = {
     phase: "#a16207",
     neutral: "#3b82f6",
-    pe: "#22c55e",
+    pe: "#16a34a",
     "dc+": "#ef4444",
     "dc-": "#111827",
   };
+  const PE_GREEN = KIND_COLOR.pe;
 
   const state = {
     tool: "select",
@@ -152,6 +153,31 @@
     return state.equipment.filter((item) => item.componentType === type);
   }
 
+  function cableProductFor(mm2, protectiveEarth = false) {
+    const requested = Number(mm2 || 0);
+    const matches = productsForType("wire")
+      .filter((item) => Boolean(item.protectiveEarth) === protectiveEarth)
+      .sort((a, b) => Number(a.sectionMm2 || 0) - Number(b.sectionMm2 || 0));
+    return matches.find((item) => Number(item.sectionMm2 || 0) >= requested) || matches[matches.length - 1] || null;
+  }
+
+  function isProtectiveEarthWire(wire) {
+    const from = findTerminal(wire.from.node, wire.from.term);
+    const to = findTerminal(wire.to.node, wire.to.term);
+    return from?.term.kind === "pe" || to?.term.kind === "pe";
+  }
+
+  function enforceProtectiveEarth(wire) {
+    if (!wire || !isProtectiveEarthWire(wire)) return;
+    const cable = cableProductFor(wire.mm2, true);
+    wire.color = PE_GREEN;
+    if (cable) {
+      wire.productId = cable.id;
+      wire.label = cable.name;
+      wire.mm2 = cable.sectionMm2;
+    }
+  }
+
   function nearestProduct(type, currentA) {
     const products = productsForType(type).filter((item) => item.currentA);
     return (
@@ -173,13 +199,15 @@
       product.voltage || (product.voltageV ? product.voltageV + " V" : null),
       product.breakingCapacityKa ? product.breakingCapacityKa + " kA" : null,
       product.sectionMm2 ? product.sectionMm2 + " mm²" : null,
+      product.nominalDischargeKa ? "In " + product.nominalDischargeKa + " kA" : null,
+      product.maxDischargeKa ? "Imax " + product.maxDischargeKa + " kA" : null,
     ]
       .filter(Boolean)
       .join(" · ");
   }
 
   async function loadEquipmentDb() {
-    const response = await fetch("/quadro/equipment-db.json?v=1");
+    const response = await fetch("/quadro/equipment-db.json?v=2");
     if (!response.ok) throw new Error("Falha ao carregar banco de equipamentos");
     const data = await response.json();
     state.equipment = data.items || [];
@@ -413,6 +441,7 @@
       wire.label = product.name;
       wire.mm2 = product.sectionMm2 || wire.mm2;
       if (product.colors?.length && !product.colors.includes(wire.color)) wire.color = product.colors[0];
+      enforceProtectiveEarth(wire);
     }
     render();
     updateInspector();
@@ -462,6 +491,7 @@
     wiresG.innerHTML = "";
 
     state.wires.forEach((w) => {
+      enforceProtectiveEarth(w);
       const a = findTerminal(w.from.node, w.from.term);
       const b = findTerminal(w.to.node, w.to.term);
       if (!a || !b) return;
@@ -530,6 +560,7 @@
 
     state.nodes.forEach((node) => {
       const def = TYPES[node.type];
+      const product = productById(node.productId);
       const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
       g.setAttribute("transform", `translate(${node.x},${node.y})`);
       g.dataset.nodeId = node.id;
@@ -550,11 +581,51 @@
       }
 
       const img = document.createElementNS("http://www.w3.org/2000/svg", "image");
-      img.setAttribute("href", def.img);
-      img.setAttributeNS("http://www.w3.org/1999/xlink", "href", def.img);
+      const imageHref = product?.image || def.img;
+      img.setAttribute("href", imageHref);
+      img.setAttributeNS("http://www.w3.org/1999/xlink", "href", imageHref);
       img.setAttribute("width", def.w);
       img.setAttribute("height", def.h);
+      img.setAttribute("preserveAspectRatio", "xMidYMid meet");
       g.appendChild(img);
+
+      if (product && node.type.startsWith("breaker") && /\.png(?:$|\?)/i.test(imageHref)) {
+        const plate = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        plate.setAttribute("x", 7);
+        plate.setAttribute("y", 27);
+        plate.setAttribute("width", def.w - 14);
+        plate.setAttribute("height", 45);
+        plate.setAttribute("rx", 2);
+        plate.setAttribute("fill", "#f8fafc");
+        plate.setAttribute("fill-opacity", "0.96");
+        plate.setAttribute("stroke", "#cbd5e1");
+        plate.setAttribute("stroke-width", "0.7");
+        g.appendChild(plate);
+
+        const specs = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        specs.setAttribute("x", def.w / 2);
+        specs.setAttribute("y", 35);
+        specs.setAttribute("text-anchor", "middle");
+        specs.setAttribute("fill", "#111827");
+        specs.setAttribute("font-family", "Arial,sans-serif");
+        specs.setAttribute("font-size", "5.4");
+        specs.setAttribute("font-weight", "700");
+        const lines = [
+          product.brand,
+          product.model,
+          `In: ${node.inA || product.currentA || "—"} A${product.poles ? ` · ${product.poles}P` : ""}`,
+          product.voltage || "",
+          product.breakingCapacityKa ? `Icu: ${product.breakingCapacityKa} kA` : "",
+        ].filter(Boolean);
+        lines.forEach((line, index) => {
+          const span = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+          span.setAttribute("x", def.w / 2);
+          span.setAttribute("dy", index ? "7.2" : "0");
+          span.textContent = line.length > 22 ? line.slice(0, 21) + "…" : line;
+          specs.appendChild(span);
+        });
+        g.appendChild(specs);
+      }
 
       const tag = document.createElementNS("http://www.w3.org/2000/svg", "text");
       tag.setAttribute("x", def.w / 2);
@@ -564,7 +635,6 @@
       tag.setAttribute("font-size", "11");
       tag.setAttribute("font-weight", "600");
       tag.setAttribute("font-family", "Segoe UI,Arial");
-      const product = productById(node.productId);
       tag.textContent = product ? `${product.brand} ${product.model}` : node.label + (node.inA ? ` ${node.inA}A` : "");
       g.appendChild(tag);
 
@@ -611,7 +681,10 @@
   function onTerminalClick(nodeId, termId, evt) {
     if (state.reconnect) {
       const wire = state.wires.find((item) => item.id === state.reconnect.wireId);
-      if (wire) wire[state.reconnect.end] = { node: nodeId, term: termId };
+      if (wire) {
+        wire[state.reconnect.end] = { node: nodeId, term: termId };
+        enforceProtectiveEarth(wire);
+      }
       state.reconnect = null;
       tempWire.setAttribute("visibility", "hidden");
       $("wire-hint").textContent = "Cabo reconectado. Clique numa ponta para alterar novamente.";
@@ -638,9 +711,14 @@
       tempWire.setAttribute("visibility", "hidden");
       return;
     }
-    const color = $("wire-color").value || KIND_COLOR[hit.term.kind] || "#a16207";
+    const fromHit = findTerminal(state.wireFrom.node, state.wireFrom.term);
     const fromNode = state.nodes.find((n) => n.id === state.wireFrom.node);
-    const cableProduct = productById(state.cableProductId);
+    const selectedCable = productById(state.cableProductId);
+    const protectiveEarth = fromHit?.term.kind === "pe" || hit.term.kind === "pe";
+    const cableProduct = protectiveEarth
+      ? cableProductFor(selectedCable?.sectionMm2 || fromNode?.mm2 || hit.node.mm2, true)
+      : selectedCable;
+    const color = protectiveEarth ? PE_GREEN : $("wire-color").value || KIND_COLOR[hit.term.kind] || "#a16207";
     const mm2 = cableProduct?.sectionMm2 || fromNode?.mm2 || hit.node.mm2 || null;
     state.wires.push({
       id: uid("w"),
@@ -772,16 +850,15 @@
   }
 
   function wire(aNode, aTerm, bNode, bTerm, color, mm2) {
-    const cable =
-      productsForType("wire")
-        .filter((item) => item.sectionMm2 >= Number(mm2 || 0))
-        .sort((a, b) => a.sectionMm2 - b.sectionMm2)[0] ||
-      productById(state.cableProductId);
+    const from = findTerminal(aNode.id, aTerm);
+    const to = findTerminal(bNode.id, bTerm);
+    const protectiveEarth = from?.term.kind === "pe" || to?.term.kind === "pe";
+    const cable = cableProductFor(mm2, protectiveEarth) || productById(state.cableProductId);
     state.wires.push({
       id: uid("w"),
       from: { node: aNode.id, term: aTerm },
       to: { node: bNode.id, term: bTerm },
-      color,
+      color: protectiveEarth ? PE_GREEN : color,
       mm2: mm2 || aNode.mm2 || bNode.mm2 || null,
       productId: cable?.id || null,
       label: cable?.name || "Cabo",
