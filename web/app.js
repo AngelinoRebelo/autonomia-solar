@@ -370,23 +370,37 @@ function openQuadro() {
     last && last.pv && last.pv.stc_w != null
       ? Number(last.pv.stc_w)
       : (Number($("panel-wp").value) || 0) * (Number($("panel-count").value) || 0);
+  const batV = Number(bat.voltage_v) || 48;
+  // Vmp aproximada da string FV (sem Voc/Vmp no catálogo): ~1,6× tensão do banco, mín. 60 V.
+  const pvV = Math.max(60, Math.round(batV * 1.6));
   const payload = {
     load_w: loadW,
     battery_draw_w: drawW,
-    battery_v: bat.voltage_v || 48,
+    battery_v: batV,
     ac_v: 220,
     panel_stc_w: stcW,
+    pv_v: pvV,
     cable_ac_m: 15,
     cable_bat_m: 2,
     cable_pv_m: 15,
   };
-  try {
-    sessionStorage.setItem("autonomia-quadro", JSON.stringify(payload));
-  } catch (_) {}
-  const q = new URLSearchParams(
-    Object.fromEntries(Object.entries(payload).map(([k, v]) => [k, String(Math.round(v * 100) / 100)]))
-  );
-  window.location.href = "/quadro/?" + q.toString();
+  const go = (board) => {
+    try {
+      sessionStorage.setItem("autonomia-quadro", JSON.stringify(board ? { ...payload, board } : payload));
+    } catch (_) {}
+    const q = new URLSearchParams(
+      Object.fromEntries(Object.entries(payload).map(([k, v]) => [k, String(Math.round(v * 100) / 100)]))
+    );
+    window.location.href = "/quadro/?" + q.toString();
+  };
+  fetch("/api/quadro", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((board) => go(board))
+    .catch(() => go(null));
 }
 
 bind();

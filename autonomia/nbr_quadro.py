@@ -206,8 +206,8 @@ def build_board(
     ok = all(c.get("ok") for c in circuits)
     notes = [
         "Critério NBR 5410: Ib ≤ In ≤ Iz (corrente de projeto ≤ disjuntor ≤ ampacidade do cabo).",
-        "Correntes de projeto usam fator 1,25 (orientação NBR 5410 / NBR 16690).",
-        "Queda de tensão: AC ≤ 2,5–4%; CC banco ≤ 1%; FV ≤ 2%.",
+        "Ib = corrente de projeto do circuito (fator 1,25) — exibida em cada cabo do quadro.",
+        "Queda de tensão: AC ≤ 2,5–4%; CC banco ≤ 1%; FV ≤ 2% (NBR 5410 / NBR 16690).",
         "Valores orientativos — não substituem projeto, ART nem o parecer da concessionária.",
     ]
 

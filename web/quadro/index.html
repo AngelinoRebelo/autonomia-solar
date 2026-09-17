@@ -74,6 +74,10 @@
       </label>
       <label>AC (V)<select id="ac-v"><option>127</option><option selected>220</option></select></label>
       <label>FV STC (W)<input id="stc-w" type="number" value="2300"></label>
+      <label>Vmp FV (V)<input id="pv-v" type="number" value="80" step="1"></label>
+      <label>Cabo AC (m)<input id="cable-ac-m" type="number" value="15" step="0.5"></label>
+      <label>Cabo bateria (m)<input id="cable-bat-m" type="number" value="2" step="0.1"></label>
+      <label>Cabo FV (m)<input id="cable-pv-m" type="number" value="15" step="0.5"></label>
     </aside>
 
     <section class="stage-wrap">
@@ -120,10 +124,10 @@
     </div>
     <div>
       <h2>Ligações</h2>
-      <div class="table-wrap"><table id="wire-table"><thead><tr><th>De</th><th>Para</th><th>Cor</th><th>Bitola</th></tr></thead><tbody></tbody></table></div>
+      <div class="table-wrap"><table id="wire-table"><thead><tr><th>De</th><th>Para</th><th>Cor</th><th>Bitola</th><th>Ib (A)</th></tr></thead><tbody></tbody></table></div>
     </div>
   </section>
 
-  <script src="/quadro/editor.js?v=5"></script>
+  <script src="/quadro/editor.js?v=6"></script>
 </body>
 </html>

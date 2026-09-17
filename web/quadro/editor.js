@@ -326,9 +326,11 @@
       battery_v: num("battery_v", 48),
       ac_v: num("ac_v", 220),
       panel_stc_w: num("panel_stc_w", 2300),
-      cable_ac_m: 15,
-      cable_bat_m: 2,
-      cable_pv_m: 15,
+      pv_v: num("pv_v", 80),
+      cable_ac_m: num("cable_ac_m", 15),
+      cable_bat_m: num("cable_bat_m", 2),
+      cable_pv_m: num("cable_pv_m", 15),
+      board: src.board || null,
     };
   }
 
@@ -338,6 +340,10 @@
     $("bat-v").value = String([12, 24, 48].includes(p.battery_v) ? p.battery_v : 48);
     $("ac-v").value = String(p.ac_v === 127 ? 127 : 220);
     $("stc-w").value = Math.round(p.panel_stc_w);
+    if ($("pv-v")) $("pv-v").value = Math.round(p.pv_v || 80);
+    if ($("cable-ac-m")) $("cable-ac-m").value = Number(p.cable_ac_m) || 15;
+    if ($("cable-bat-m")) $("cable-bat-m").value = Number(p.cable_bat_m) || 2;
+    if ($("cable-pv-m")) $("cable-pv-m").value = Number(p.cable_pv_m) || 15;
   }
 
   function payload() {
@@ -347,9 +353,10 @@
       battery_v: Number($("bat-v").value) || 48,
       ac_v: Number($("ac-v").value) || 220,
       panel_stc_w: Number($("stc-w").value) || 0,
-      cable_ac_m: 15,
-      cable_bat_m: 2,
-      cable_pv_m: 15,
+      pv_v: Number(($("pv-v") && $("pv-v").value) || 80),
+      cable_ac_m: Number(($("cable-ac-m") && $("cable-ac-m").value) || 15),
+      cable_bat_m: Number(($("cable-bat-m") && $("cable-bat-m").value) || 2),
+      cable_pv_m: Number(($("cable-pv-m") && $("cable-pv-m").value) || 15),
     };
   }
 
@@ -365,6 +372,7 @@
       productId: extras.productId || null,
       label: extras.label || product?.name || def.label,
       inA: extras.inA || product?.currentA || null,
+      designA: extras.designA != null ? extras.designA : null,
       mm2: extras.mm2 || product?.sectionMm2 || null,
       circuitId: extras.circuitId || null,
     };
@@ -486,6 +494,9 @@
       $("insp-title").textContent = w.label || "Cabo";
       $("insp-meta").textContent =
         (productMeta(product) ? productMeta(product) + " · " : "") +
+        (w.designA != null
+          ? "Ib " + Number(w.designA).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " A · "
+          : "") +
         w.from.node + "." + w.from.term + " → " + w.to.node + "." + w.to.term;
       fillInspectorProducts("wire", w.productId);
       $("insp-label").value = w.label || "Cabo";
@@ -521,15 +532,19 @@
         setHint("Cabo selecionado. Clique numa ponta para reconectar, ou Delete para remover.");
       });
       wiresG.appendChild(path);
-      if (w.mm2) {
+      if (w.mm2 || w.designA != null) {
         const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
         t.setAttribute("x", (a.world.x + b.world.x) / 2);
         t.setAttribute("y", midY - 6);
         t.setAttribute("text-anchor", "middle");
-        t.setAttribute("fill", "#475569");
+        t.setAttribute("fill", "#334155");
         t.setAttribute("font-size", "11");
+        t.setAttribute("font-weight", "600");
         t.setAttribute("font-family", "Segoe UI,Arial");
-        t.textContent = w.mm2 + " mm²";
+        const parts = [];
+        if (w.mm2) parts.push(w.mm2 + " mm²");
+        if (w.designA != null) parts.push(Number(w.designA).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " A");
+        t.textContent = parts.join(" · ");
         wiresG.appendChild(t);
       }
       const wireSelected = state.selected?.kind === "wire" && state.selected.id === w.id;
@@ -725,12 +740,16 @@
       : selectedCable;
     const color = protectiveEarth ? PE_GREEN : $("wire-color").value || KIND_COLOR[hit.term.kind] || "#a16207";
     const mm2 = cableProduct?.sectionMm2 || fromNode?.mm2 || hit.node.mm2 || null;
+    const designA = fromNode?.designA != null ? fromNode.designA : hit.node.designA;
+    const circuitId = fromNode?.circuitId || hit.node.circuitId || null;
     state.wires.push({
       id: uid("w"),
       from: { ...state.wireFrom },
       to: { node: nodeId, term: termId },
       color,
       mm2,
+      designA: designA != null ? designA : null,
+      circuitId,
       productId: cableProduct?.id || null,
       label: cableProduct?.name || "Cabo",
     });
@@ -749,7 +768,8 @@
       tr.innerHTML = `<td>${a ? a.node.label + " · " + a.term.name : "?"}</td>
         <td>${b ? b.node.label + " · " + b.term.name : "?"}</td>
         <td><span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:${w.color}"></span></td>
-        <td>${w.mm2 ? w.mm2 + " mm²" : "—"}</td>`;
+        <td>${w.mm2 ? w.mm2 + " mm²" : "—"}</td>
+        <td>${w.designA != null ? Number(w.designA).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " A" : "—"}</td>`;
       tb.appendChild(tr);
     });
   }
@@ -780,16 +800,41 @@
     state.boardData = await r.json();
     renderNormTable(state.boardData);
     if (rebuild || state.nodes.length === 0) seedFromBoard(state.boardData);
-    else applySizesToNodes(state.boardData);
+    else {
+      applySizesToNodes(state.boardData);
+      syncWiresFromBoard(state.boardData);
+    }
     render();
+  }
+
+  function circuitById(data, id) {
+    return (data?.circuits || []).find((c) => c.id === id) || null;
+  }
+
+  function syncWiresFromBoard(data) {
+    state.wires.forEach((w) => {
+      const from = state.nodes.find((n) => n.id === w.from.node);
+      const to = state.nodes.find((n) => n.id === w.to.node);
+      const circuitId = w.circuitId || from?.circuitId || to?.circuitId;
+      const ckt = circuitById(data, circuitId);
+      if (!ckt) return;
+      if (w.color !== PE_GREEN && !productById(w.productId)?.protectiveEarth) {
+        w.mm2 = ckt.mm2;
+        w.designA = ckt.designA;
+        w.circuitId = ckt.id;
+      } else {
+        w.designA = ckt.designA;
+        w.circuitId = ckt.id;
+      }
+    });
   }
 
   function applySizesToNodes(data) {
     const map = {
-      geral: (c) => ({ inA: c.breakerA, mm2: c.mm2 }),
-      "ac-carga": (c) => ({ inA: c.breakerA, mm2: c.mm2 }),
-      "bat-cc": (c) => ({ inA: c.breakerA, mm2: c.mm2 }),
-      "pv-cc": (c) => ({ inA: c.breakerA, mm2: c.mm2 }),
+      geral: (c) => ({ inA: c.breakerA, mm2: c.mm2, designA: c.designA }),
+      "ac-carga": (c) => ({ inA: c.breakerA, mm2: c.mm2, designA: c.designA }),
+      "bat-cc": (c) => ({ inA: c.breakerA, mm2: c.mm2, designA: c.designA }),
+      "pv-cc": (c) => ({ inA: c.breakerA, mm2: c.mm2, designA: c.designA }),
     };
     data.circuits.forEach((c) => {
       const fn = map[c.id];
@@ -819,52 +864,96 @@
       return product ? { productId: product.id, label: product.name } : {};
     };
 
-    byId.panel = addNode("panel", 100, 220, { label: "String FV", circuitId: "pv-cc", mm2: ck["pv-cc"]?.mm2 });
-    byId.dps_dc = addNode("dps_dc", 280, 160, { label: "DPS CC", circuitId: "pv-cc" });
+    byId.panel = addNode("panel", 100, 220, {
+      label: "String FV",
+      circuitId: "pv-cc",
+      mm2: ck["pv-cc"]?.mm2,
+      designA: ck["pv-cc"]?.designA,
+    });
+    byId.dps_dc = addNode("dps_dc", 280, 160, {
+      label: "DPS CC",
+      circuitId: "pv-cc",
+      mm2: ck["pv-cc"]?.mm2,
+      designA: ck["pv-cc"]?.designA,
+    });
     byId.dj_pv = addNode("breaker_dc", 400, 160, {
       ...productExtra("breaker_dc", ck["pv-cc"]?.breakerA || 40),
       circuitId: "pv-cc",
       inA: ck["pv-cc"]?.breakerA,
       mm2: ck["pv-cc"]?.mm2,
+      designA: ck["pv-cc"]?.designA,
     });
-    byId.battery = addNode("battery", 100, 420, { label: `Banco ${data.demand.batteryV}V`, circuitId: "bat-cc", mm2: ck["bat-cc"]?.mm2 });
+    byId.battery = addNode("battery", 100, 420, {
+      label: `Banco ${data.demand.batteryV}V`,
+      circuitId: "bat-cc",
+      mm2: ck["bat-cc"]?.mm2,
+      designA: ck["bat-cc"]?.designA,
+    });
     byId.dj_bat = addNode("breaker_dc", 280, 380, {
       ...productExtra("breaker_dc", ck["bat-cc"]?.breakerA || 25),
       circuitId: "bat-cc",
       inA: ck["bat-cc"]?.breakerA,
       mm2: ck["bat-cc"]?.mm2,
+      designA: ck["bat-cc"]?.designA,
     });
-    byId.inverter = addNode("inverter", 520, 400, { label: "Inversor", mm2: ck["ac-carga"]?.mm2 });
+    byId.inverter = addNode("inverter", 520, 400, {
+      label: "Inversor",
+      mm2: ck["ac-carga"]?.mm2,
+      designA: ck["ac-carga"]?.designA,
+    });
     byId.dj_geral = addNode("breaker_ac", 760, 160, {
       ...productExtra("breaker_ac", ck.geral?.breakerA || 16),
       circuitId: "geral",
       inA: ck.geral?.breakerA,
       mm2: ck.geral?.mm2,
+      designA: ck.geral?.designA,
     });
-    byId.dr = addNode("dr", 880, 160, { label: "DR 30 mA" });
-    byId.dps_ac = addNode("dps_ac", 1020, 160, { label: "DPS AC" });
+    byId.dr = addNode("dr", 880, 160, {
+      label: "DR 30 mA",
+      circuitId: "geral",
+      mm2: ck.geral?.mm2,
+      designA: ck.geral?.designA,
+    });
+    byId.dps_ac = addNode("dps_ac", 1020, 160, {
+      label: "DPS AC",
+      circuitId: "geral",
+      mm2: ck.geral?.mm2,
+      designA: ck.geral?.designA,
+    });
     byId.dj_load = addNode("breaker_ac", 1160, 160, {
       ...productExtra("breaker_ac", ck["ac-carga"]?.breakerA || 6),
       circuitId: "ac-carga",
       inA: ck["ac-carga"]?.breakerA,
       mm2: ck["ac-carga"]?.mm2,
+      designA: ck["ac-carga"]?.designA,
     });
-    byId.bus = addNode("busbar", 760, 360, { label: "Barramento AC" });
+    byId.bus = addNode("busbar", 760, 360, {
+      label: "Barramento AC",
+      circuitId: "ac-carga",
+      mm2: ck["ac-carga"]?.mm2,
+      designA: ck["ac-carga"]?.designA,
+    });
 
     autoWireSystem(byId);
   }
 
-  function wire(aNode, aTerm, bNode, bTerm, color, mm2) {
+  function wire(aNode, aTerm, bNode, bTerm, color, mm2, designA, circuitId) {
     const from = findTerminal(aNode.id, aTerm);
     const to = findTerminal(bNode.id, bTerm);
     const protectiveEarth = from?.term.kind === "pe" || to?.term.kind === "pe";
-    const cable = cableProductFor(mm2, protectiveEarth) || productById(state.cableProductId);
+    const resolvedMm2 = mm2 || aNode.mm2 || bNode.mm2 || null;
+    const resolvedDesignA =
+      designA != null ? designA : aNode.designA != null ? aNode.designA : bNode.designA;
+    const resolvedCircuit = circuitId || aNode.circuitId || bNode.circuitId || null;
+    const cable = cableProductFor(resolvedMm2, protectiveEarth) || productById(state.cableProductId);
     state.wires.push({
       id: uid("w"),
       from: { node: aNode.id, term: aTerm },
       to: { node: bNode.id, term: bTerm },
       color: protectiveEarth ? PE_GREEN : color,
-      mm2: mm2 || aNode.mm2 || bNode.mm2 || null,
+      mm2: resolvedMm2,
+      designA: resolvedDesignA != null ? resolvedDesignA : null,
+      circuitId: resolvedCircuit,
       productId: cable?.id || null,
       label: cable?.name || "Cabo",
     });
@@ -890,41 +979,43 @@
     state.wires = [];
     const { panel, dps_dc, dj_pv, battery, dj_bat, inverter, dj_geral, dr, dps_ac, dj_load, bus } = byId;
     if (panel && dps_dc) {
-      wire(panel, "pos", dps_dc, "pos", "#ef4444", panel.mm2);
-      wire(panel, "neg", dps_dc, "neg", "#111827", panel.mm2);
+      wire(panel, "pos", dps_dc, "pos", "#ef4444", panel.mm2, panel.designA, "pv-cc");
+      wire(panel, "neg", dps_dc, "neg", "#111827", panel.mm2, panel.designA, "pv-cc");
     }
-    if (dps_dc && dj_pv) wire(dps_dc, "pos", dj_pv, "pos_in", "#ef4444", dj_pv.mm2);
-    if (dps_dc && dj_pv) wire(dps_dc, "neg", dj_pv, "neg_in", "#111827", dj_pv.mm2);
+    if (dps_dc && dj_pv) {
+      wire(dps_dc, "pos", dj_pv, "pos_in", "#ef4444", dj_pv.mm2, dj_pv.designA, "pv-cc");
+      wire(dps_dc, "neg", dj_pv, "neg_in", "#111827", dj_pv.mm2, dj_pv.designA, "pv-cc");
+    }
     if (dj_pv && inverter) {
-      wire(dj_pv, "pos_out", inverter, "dc_pos", "#ef4444", dj_pv.mm2);
-      wire(dj_pv, "neg_out", inverter, "dc_neg", "#111827", dj_pv.mm2);
+      wire(dj_pv, "pos_out", inverter, "dc_pos", "#ef4444", dj_pv.mm2, dj_pv.designA, "pv-cc");
+      wire(dj_pv, "neg_out", inverter, "dc_neg", "#111827", dj_pv.mm2, dj_pv.designA, "pv-cc");
     }
     if (battery && dj_bat) {
-      wire(battery, "pos", dj_bat, "pos_in", "#ef4444", dj_bat.mm2);
-      wire(battery, "neg", dj_bat, "neg_in", "#111827", dj_bat.mm2);
+      wire(battery, "pos", dj_bat, "pos_in", "#ef4444", dj_bat.mm2, dj_bat.designA, "bat-cc");
+      wire(battery, "neg", dj_bat, "neg_in", "#111827", dj_bat.mm2, dj_bat.designA, "bat-cc");
     }
     if (dj_bat && inverter) {
-      wire(dj_bat, "pos_out", inverter, "dc_pos", "#ef4444", dj_bat.mm2);
-      wire(dj_bat, "neg_out", inverter, "dc_neg", "#111827", dj_bat.mm2);
+      wire(dj_bat, "pos_out", inverter, "dc_pos", "#ef4444", dj_bat.mm2, dj_bat.designA, "bat-cc");
+      wire(dj_bat, "neg_out", inverter, "dc_neg", "#111827", dj_bat.mm2, dj_bat.designA, "bat-cc");
     }
     if (inverter && dj_geral) {
-      wire(inverter, "ac_l", dj_geral, "L_in", "#a16207", dj_geral.mm2);
-      wire(inverter, "ac_n", dj_geral, "N_in", "#3b82f6", dj_geral.mm2);
-      wire(inverter, "pe", dps_ac || dj_geral, dps_ac ? "PE" : "N_out", PE_GREEN);
+      wire(inverter, "ac_l", dj_geral, "L_in", "#a16207", dj_geral.mm2, dj_geral.designA, "geral");
+      wire(inverter, "ac_n", dj_geral, "N_in", "#3b82f6", dj_geral.mm2, dj_geral.designA, "geral");
+      wire(inverter, "pe", dps_ac || dj_geral, dps_ac ? "PE" : "N_out", PE_GREEN, 6, dj_geral.designA, "geral");
     }
     if (dj_geral && dr) {
-      wire(dj_geral, "L_out", dr, "L_in", "#a16207", dj_geral.mm2);
-      wire(dj_geral, "N_out", dr, "N_in", "#3b82f6", dj_geral.mm2);
+      wire(dj_geral, "L_out", dr, "L_in", "#a16207", dj_geral.mm2, dj_geral.designA, "geral");
+      wire(dj_geral, "N_out", dr, "N_in", "#3b82f6", dj_geral.mm2, dj_geral.designA, "geral");
     }
     if (dr && dps_ac) {
-      wire(dr, "L_out", dps_ac, "L", "#a16207");
-      wire(dr, "N_out", dps_ac, "N", "#3b82f6");
+      wire(dr, "L_out", dps_ac, "L", "#a16207", dj_geral?.mm2, dj_geral?.designA, "geral");
+      wire(dr, "N_out", dps_ac, "N", "#3b82f6", dj_geral?.mm2, dj_geral?.designA, "geral");
     }
     if (dr && dj_load) {
-      wire(dr, "L_load", dj_load, "L_in", "#a16207", dj_load.mm2);
-      wire(dr, "N_load", dj_load, "N_in", "#3b82f6", dj_load.mm2);
+      wire(dr, "L_load", dj_load, "L_in", "#a16207", dj_load.mm2, dj_load.designA, "ac-carga");
+      wire(dr, "N_load", dj_load, "N_in", "#3b82f6", dj_load.mm2, dj_load.designA, "ac-carga");
     }
-    if (dj_load && bus) wire(dj_load, "L_out", bus, "t1", "#a16207", dj_load.mm2);
+    if (dj_load && bus) wire(dj_load, "L_out", bus, "t1", "#a16207", dj_load.mm2, dj_load.designA, "ac-carga");
     render();
   }
 
