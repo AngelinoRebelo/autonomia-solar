@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "updatedAt": "2026-09-17",
   "disclaimer": "Dados de catálogo para pré-seleção. Confirmar código, tensão, corrente, Icn/Icu e disponibilidade no datasheet vigente do fabricante.",
   "items": [
@@ -265,18 +265,32 @@
       "source": "https://www.phoenixcontact.com/pt-br/produtos/disjuntor-fuse-103x38-12a-pv-3061347"
     },
     {
-      "id": "battery-felicity-fla24100",
+      "id": "felicity-fla24100",
       "category": "batteries",
       "componentType": "battery",
       "brand": "Felicity Solar",
-      "model": "FLA24100",
-      "name": "Bateria Felicity Solar FLA24100 25,6 V 100 Ah",
+      "model": "FLA24100 2,5 kWh (24 V)",
+      "name": "Bateria Felicity Solar FLA24100 2,5 kWh 25,6 V",
       "voltageV": 25.6,
+      "voltageMinV": 24.0,
+      "voltageMaxV": 28.8,
       "capacityAh": 100,
-      "capacityKwh": 2.56,
-      "maxCurrentA": 100,
-      "image": "/quadro/img/battery.svg",
-      "source": "https://us.felicitysolar.com/product/fla24100/"
+      "capacityKwh": 2.5,
+      "capacityWh": 2500,
+      "maxCurrentA": 110,
+      "maxPowerW": 2750,
+      "recommendedPowerW": 1500,
+      "parallelModules": 6,
+      "cycles": 6000,
+      "dodPct": 80,
+      "ip": "IP21",
+      "weightKg": 27,
+      "dimsMm": "345×430×195",
+      "comms": "CAN / RS485",
+      "image": "/img/batteries/felicity-fla24100.png",
+      "imageCredit": "Imagem fornecida pelo usuário",
+      "source": "https://us.felicitysolar.com/product/fla24100/",
+      "catalogId": "felicity-fla24100"
     },
     {
       "id": "battery-deye-rwf102",

@@ -213,6 +213,8 @@
       product.voltage || (product.voltageV ? product.voltageV + " V" : null),
       product.breakingCapacityKa ? product.breakingCapacityKa + " kA" : null,
       product.sectionMm2 ? product.sectionMm2 + " mm²" : null,
+      product.capacityKwh ? product.capacityKwh + " kWh" : null,
+      product.maxCurrentA ? "máx. " + product.maxCurrentA + " A" : null,
       product.nominalDischargeKa ? "In " + product.nominalDischargeKa + " kA" : null,
       product.maxDischargeKa ? "Imax " + product.maxDischargeKa + " kA" : null,
     ]
@@ -221,12 +223,93 @@
   }
 
   async function loadEquipmentDb() {
-    const response = await fetch("/quadro/equipment-db.json?v=3");
+    const response = await fetch("/quadro/equipment-db.json?v=4");
     if (!response.ok) throw new Error("Falha ao carregar banco de equipamentos");
     const data = await response.json();
-    state.equipment = data.items || [];
+    const electrical = data.items || [];
+    let shared = [];
+    try {
+      const catRes = await fetch("/api/catalog");
+      if (catRes.ok) {
+        const cat = await catRes.json();
+        shared = [
+          ...(cat.batteries || []).map(catalogBatteryToEquip),
+          ...(cat.inverters || []).map(catalogInverterToEquip),
+          ...(cat.panels || []).map(catalogPanelToEquip),
+        ];
+      }
+    } catch (_) {}
+    // Catálogo da calculadora prevalece para baterias/inversores/painéis; mantém proteções/cabos do quadro.
+    const sharedIds = new Set(shared.map((item) => item.id));
+    const catalogIds = new Set(shared.map((item) => item.catalogId).filter(Boolean));
+    const onlyElectrical = electrical.filter((item) => {
+      if (sharedIds.has(item.id) || (item.catalogId && catalogIds.has(item.catalogId))) return false;
+      if (["batteries", "inverters", "power"].includes(item.category) && item.componentType !== "wire") {
+        // Evita duplicar genéricos do quadro quando o mesmo produto veio do /api/catalog.
+        if (item.componentType === "battery" || item.componentType === "inverter" || item.componentType === "panel") {
+          const key = `${item.brand}|${item.model}`.toLocaleLowerCase("pt-BR");
+          return !shared.some((s) => `${s.brand}|${s.model}`.toLocaleLowerCase("pt-BR") === key);
+        }
+      }
+      return true;
+    });
+    state.equipment = [...shared, ...onlyElectrical];
     renderLibrary();
     fillCableProducts();
+  }
+
+  function catalogBatteryToEquip(b) {
+    return {
+      id: b.id,
+      catalogId: b.id,
+      category: "batteries",
+      componentType: "battery",
+      brand: b.brand,
+      model: b.model,
+      name: `${b.brand} ${b.model}`,
+      voltageV: b.voltage_v,
+      capacityWh: b.capacity_wh,
+      capacityKwh: b.capacity_wh ? Number((b.capacity_wh / 1000).toFixed(2)) : null,
+      maxCurrentA: b.max_current_a || null,
+      maxPowerW: b.max_power_w || null,
+      recommendedPowerW: b.recommended_power_w || null,
+      dodPct: b.dod_pct,
+      image: b.image || "/quadro/img/battery.svg",
+      source: b.product_url || b.source || b.brand_url || null,
+      notes: b.notes || null,
+    };
+  }
+
+  function catalogInverterToEquip(inv) {
+    return {
+      id: inv.id,
+      catalogId: inv.id,
+      category: "inverters",
+      componentType: "inverter",
+      brand: inv.brand,
+      model: inv.model,
+      name: `${inv.brand} ${inv.model}`,
+      powerW: inv.power_w || null,
+      image: inv.image || "/quadro/img/inverter.svg",
+      source: inv.product_url || inv.source || inv.brand_url || null,
+      notes: inv.notes || null,
+    };
+  }
+
+  function catalogPanelToEquip(p) {
+    return {
+      id: p.id,
+      catalogId: p.id,
+      category: "power",
+      componentType: "panel",
+      brand: p.brand,
+      model: p.model,
+      name: `${p.brand} ${p.model}`,
+      powerW: p.wp || p.power_w || null,
+      image: p.image || "/quadro/img/panel.svg",
+      source: p.product_url || p.source || p.brand_url || null,
+      notes: p.notes || null,
+    };
   }
 
   function renderLibrary() {

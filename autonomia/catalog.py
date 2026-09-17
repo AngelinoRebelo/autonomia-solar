@@ -18,17 +18,28 @@ BUILTIN = {
         {
             "id": "felicity-fla24100",
             "brand": "Felicity Solar",
-            "model": "FLA24100 2,56 kWh (24 V)",
-            "capacity_wh": 2560,
-            "dod_pct": 90,
-            "datasheet_dod_pct": 95,
+            "model": "FLA24100 2,5 kWh (24 V)",
+            "capacity_wh": 2500,
+            "dod_pct": 80,
+            "datasheet_dod_pct": 80,
             "eff_pct": 95,
             "voltage_v": 25.6,
-            "notes": "Felicity rack 24 V 100 Ah (~2,5 kWh)",
-            "image": "/img/batteries/felicity-fla24100.svg",
-            "product_url": "https://www.neosolar.com.br/loja/bateria-litio.html",
-            "brand_url": "https://www.neosolar.com.br/",
-            "shop": "Neosolar",
+            "voltage_min_v": 24.0,
+            "voltage_max_v": 28.8,
+            "max_current_a": 110,
+            "max_power_w": 2750,
+            "recommended_power_w": 1500,
+            "parallel_modules": 6,
+            "cycles": 6000,
+            "ip": "IP21",
+            "weight_kg": 27,
+            "dims_mm": "345×430×195",
+            "comms": "CAN / RS485",
+            "notes": "Útil 2,5 kWh · 25,6 V · máx. 110 A/120 s · 2750 W · 1–6 em paralelo · 6000 ciclos @ 80% DoD",
+            "image": "/img/batteries/felicity-fla24100.png",
+            "product_url": "https://us.felicitysolar.com/product/fla24100/",
+            "brand_url": "https://www.felicitysolar.com/",
+            "shop": "Felicity Solar",
         },
         {
             "id": "felicity-lpbf24100",
@@ -692,7 +703,7 @@ def _apply_network(catalog: dict) -> list[str]:
     except Exception as exc:
         notes.append(f"Jinko: offline ({exc.__class__.__name__})")
 
-    catalog["rev"] = 3
+    catalog["rev"] = 4
     catalog["fetched_at"] = time.strftime("%Y-%m-%d %H:%M")
     catalog["fetch_log"] = notes
     return notes
