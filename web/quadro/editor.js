@@ -247,16 +247,65 @@
     return ids;
   }
 
-  function inferCircuitId(node) {
-    if (node.circuitId) return node.circuitId;
-    if (node.type === "battery" || node.type === "panel") {
-      return node.type === "battery" ? "bat-cc" : "pv-cc";
+  function nodeTypesTouchingWire(wire) {
+    const from = state.nodes.find((n) => n.id === wire.from.node);
+    const to = state.nodes.find((n) => n.id === wire.to.node);
+    return [from?.type, to?.type].filter(Boolean);
+  }
+
+  function classifyWireCircuit(wire) {
+    const types = new Set(nodeTypesTouchingWire(wire));
+    const has = (t) => types.has(t);
+    if (has("pe") || wire.color === PE_GREEN) return wire.circuitId || null;
+    // FV → DPS/DJ/MPPT
+    if (has("panel") || (has("dps_dc") && (has("breaker_dc") || has("charge_controller")))) {
+      if (has("battery")) return "mppt-bat";
+      return "pv-cc";
     }
+    if (has("charge_controller") && has("battery")) return "mppt-bat";
+    if (has("charge_controller") && (has("breaker_dc") || has("panel") || has("dps_dc"))) return "pv-cc";
+    // Bateria ↔ DJ ↔ inversor (descarga)
+    if (has("battery") && has("inverter")) return "bat-cc";
+    if (has("battery") && has("breaker_dc")) {
+      const br = state.nodes.find((n) => n.type === "breaker_dc" && (n.id === wire.from.node || n.id === wire.to.node));
+      if (br) {
+        const linked = connectedNodeIds(br.id);
+        if ([...linked].some((id) => state.nodes.find((n) => n.id === id)?.type === "charge_controller")) {
+          return "mppt-bat";
+        }
+        if ([...linked].some((id) => state.nodes.find((n) => n.id === id)?.type === "inverter")) {
+          return "bat-cc";
+        }
+      }
+      return "bat-cc";
+    }
+    if (has("breaker_dc") && has("inverter")) return "bat-cc";
+    if (has("breaker_dc") && has("charge_controller")) {
+      const br = state.nodes.find((n) => n.type === "breaker_dc" && (n.id === wire.from.node || n.id === wire.to.node));
+      if (br) {
+        const linked = connectedNodeIds(br.id);
+        if ([...linked].some((id) => state.nodes.find((n) => n.id === id)?.type === "panel" || state.nodes.find((n) => n.id === id)?.type === "dps_dc")) {
+          return "pv-cc";
+        }
+      }
+      return "mppt-bat";
+    }
+    return wire.circuitId || null;
+  }
+
+  function inferCircuitId(node) {
+    if (!node) return null;
+    if (node.type === "battery") return "bat-cc";
+    if (node.type === "panel" || node.type === "dps_dc") return "pv-cc";
+    if (node.type === "charge_controller") return "mppt-bat";
     if (node.type === "breaker_dc") {
       const linked = connectedNodeIds(node.id);
-      if ([...linked].some((id) => state.nodes.find((n) => n.id === id)?.type === "battery")) return "bat-cc";
-      if ([...linked].some((id) => state.nodes.find((n) => n.id === id)?.type === "panel")) return "pv-cc";
-      if ([...linked].some((id) => state.nodes.find((n) => n.id === id)?.type === "dps_dc")) return "pv-cc";
+      const types = [...linked].map((id) => state.nodes.find((n) => n.id === id)?.type);
+      if (types.includes("panel") || types.includes("dps_dc")) return "pv-cc";
+      if (types.includes("charge_controller") && types.includes("battery")) return "mppt-bat";
+      if (types.includes("inverter") || types.includes("battery")) return "bat-cc";
+      if (types.includes("charge_controller")) return "pv-cc";
+      return node.circuitId || "bat-cc";
     }
     if (node.type === "breaker_ac") {
       if (node.circuitId === "geral" || node.circuitId === "ac-carga") return node.circuitId;
@@ -266,9 +315,8 @@
       if ([...linked].some((id) => state.nodes.find((n) => n.id === id)?.type === "dr")) return "geral";
     }
     if (node.type === "dr" || node.type === "dps_ac") return "geral";
-    if (node.type === "dps_dc") return "pv-cc";
     if (node.type === "busbar") return "ac-carga";
-    return null;
+    return node.circuitId || null;
   }
 
   function circuitForNode(node) {
@@ -341,7 +389,7 @@
   }
 
   async function loadEquipmentDb() {
-    const response = await fetch("/quadro/equipment-db.json?v=7");
+    const response = await fetch("/quadro/equipment-db.json?v=8");
     if (!response.ok) throw new Error("Falha ao carregar banco de equipamentos");
     const data = await response.json();
     const electrical = data.items || [];
@@ -630,6 +678,9 @@
     if (mppt.length) {
       const cur = mppt.map((m) => Number(m.currentA || 0)).filter((a) => a > 0);
       if (cur.length) next.mppt_a = Math.max(...cur);
+    } else if (!next.mppt_a) {
+      // Sem MPPT no quadro: ainda dimensiona carga FV→banco pela potência das placas.
+      next.mppt_a = 0;
     }
 
     next.battery_v = nominalBatteryV(next.battery_v);
@@ -671,6 +722,9 @@
       panel_id: state.selection.panel_id || "",
       panel_count: state.selection.panel_count || 1,
       battery_max_a: 0,
+      mppt_a: 0,
+      mppt_eff_pct: 98,
+      cable_mppt_m: 2,
     };
     const data = demandFromPlacedEquipment(base);
     syncDemandFormFromPayload(data);
@@ -1286,30 +1340,42 @@
       if (inferred) n.circuitId = inferred;
     });
     state.wires.forEach((w) => {
-      if (w.circuitId) return;
-      const from = state.nodes.find((n) => n.id === w.from.node);
-      const to = state.nodes.find((n) => n.id === w.to.node);
-      w.circuitId = from?.circuitId || to?.circuitId || null;
+      const classified = classifyWireCircuit(w);
+      if (classified) w.circuitId = classified;
+      else if (!w.circuitId) {
+        const from = state.nodes.find((n) => n.id === w.from.node);
+        const to = state.nodes.find((n) => n.id === w.to.node);
+        w.circuitId = from?.circuitId || to?.circuitId || null;
+      }
     });
   }
 
   function syncWiresFromBoard(data) {
+    assignCircuitsFromTopology();
     state.wires.forEach((w) => {
-      const from = state.nodes.find((n) => n.id === w.from.node);
-      const to = state.nodes.find((n) => n.id === w.to.node);
-      const circuitId = w.circuitId || from?.circuitId || to?.circuitId || inferCircuitId(from || {}) || inferCircuitId(to || {});
-      const ckt = circuitById(data, circuitId);
+      const ckt = circuitById(data, w.circuitId);
       if (!ckt) return;
       w.circuitId = ckt.id;
       w.designA = ckt.designA;
-      if (w.color !== PE_GREEN && !productById(w.productId)?.protectiveEarth) {
-        w.mm2 = ckt.mm2;
-        const cable = cableProductFor(ckt.mm2, false);
-        if (cable) {
-          w.productId = cable.id;
-          w.label = cable.name;
+      if (w.color === PE_GREEN || productById(w.productId)?.protectiveEarth) {
+        const pe = cableProductFor(ckt.mm2, true) || cableProductFor(6, true);
+        if (pe) {
+          w.productId = pe.id;
+          w.label = pe.name;
+          w.mm2 = pe.sectionMm2;
         }
+        return;
       }
+      // Sempre aplica a bitola do circuito (nunca deixar 4 mm² com Ib de 200 A).
+      w.mm2 = ckt.mm2;
+      const cable = cableProductFor(ckt.mm2, false);
+      if (cable) {
+        w.productId = cable.id;
+        w.label = cable.name;
+        // Mantém mm² do cálculo NBR, mesmo se o catálogo só tiver bitola menor.
+        if (Number(cable.sectionMm2) >= Number(ckt.mm2)) w.mm2 = cable.sectionMm2;
+      }
+      enforceWirePolarityColor(w);
     });
   }
 
@@ -1430,6 +1496,27 @@
       mm2: ck["pv-cc"]?.mm2,
       designA: ck["pv-cc"]?.designA,
     });
+    const mpptProd =
+      productsForType("charge_controller").sort(
+        (a, b) => Number(b.currentA || 0) - Number(a.currentA || 0)
+      )[0] || null;
+    if (ck["mppt-bat"] || mpptProd) {
+      byId.mppt = addNode("charge_controller", 280, 280, {
+        productId: mpptProd?.id,
+        label: mpptProd?.name || "Controlador MPPT",
+        circuitId: "mppt-bat",
+        inA: mpptProd?.currentA || ck["mppt-bat"]?.breakerA,
+        mm2: ck["mppt-bat"]?.mm2 || ck["pv-cc"]?.mm2,
+        designA: ck["mppt-bat"]?.designA || ck["pv-cc"]?.designA,
+      });
+      byId.dj_mppt = addNode("breaker_dc", 400, 280, {
+        ...productExtra("breaker_dc", ck["mppt-bat"]?.breakerA || ck["pv-cc"]?.breakerA || 40),
+        circuitId: "mppt-bat",
+        inA: ck["mppt-bat"]?.breakerA,
+        mm2: ck["mppt-bat"]?.mm2,
+        designA: ck["mppt-bat"]?.designA,
+      });
+    }
     byId.battery = addNode("battery", 100, 420, {
       productId: batProd?.id,
       label: batProd?.name || `Banco ${nominalBatteryV(demand.batteryV) || 48}V`,
@@ -1437,7 +1524,7 @@
       mm2: ck["bat-cc"]?.mm2,
       designA: ck["bat-cc"]?.designA,
     });
-    byId.dj_bat = addNode("breaker_dc", 280, 380, {
+    byId.dj_bat = addNode("breaker_dc", 280, 420, {
       ...productExtra("breaker_dc", ck["bat-cc"]?.breakerA || 25),
       circuitId: "bat-cc",
       inA: ck["bat-cc"]?.breakerA,
@@ -1519,8 +1606,10 @@
         if (n.type === "panel") byId.panel = n;
         if (n.type === "battery") byId.battery = n;
         if (n.type === "inverter") byId.inverter = n;
+        if (n.type === "charge_controller") byId.mppt = n;
         if (n.circuitId === "pv-cc" && n.type === "breaker_dc") byId.dj_pv = n;
         if (n.circuitId === "bat-cc" && n.type === "breaker_dc") byId.dj_bat = n;
+        if (n.circuitId === "mppt-bat" && n.type === "breaker_dc") byId.dj_mppt = n;
         if (n.circuitId === "geral") byId.dj_geral = n;
         if (n.circuitId === "ac-carga") byId.dj_load = n;
         if (n.type === "dr") byId.dr = n;
@@ -1530,26 +1619,73 @@
       });
     }
     state.wires = [];
-    const { panel, dps_dc, dj_pv, battery, dj_bat, inverter, dj_geral, dr, dps_ac, dj_load, bus } = byId;
+    const ck = Object.fromEntries((state.boardData?.circuits || []).map((c) => [c.id, c]));
+    const {
+      panel,
+      dps_dc,
+      dj_pv,
+      mppt,
+      dj_mppt,
+      battery,
+      dj_bat,
+      inverter,
+      dj_geral,
+      dr,
+      dps_ac,
+      dj_load,
+      bus,
+    } = byId;
+    const pvMm = ck["pv-cc"]?.mm2 ?? panel?.mm2;
+    const pvIb = ck["pv-cc"]?.designA ?? panel?.designA;
+    const mpMm = ck["mppt-bat"]?.mm2 ?? ck["bat-cc"]?.mm2;
+    const mpIb = ck["mppt-bat"]?.designA ?? ck["bat-cc"]?.designA;
+    const batMm = ck["bat-cc"]?.mm2 ?? battery?.mm2;
+    const batIb = ck["bat-cc"]?.designA ?? battery?.designA;
+
+    // FV → DPS → DJ → MPPT (ou inversor)
     if (panel && dps_dc) {
-      wire(panel, "pos", dps_dc, "pos", "#ef4444", panel.mm2, panel.designA, "pv-cc");
-      wire(panel, "neg", dps_dc, "neg", "#111827", panel.mm2, panel.designA, "pv-cc");
+      wire(panel, "pos", dps_dc, "pos", "#ef4444", pvMm, pvIb, "pv-cc");
+      wire(panel, "neg", dps_dc, "neg", "#111827", pvMm, pvIb, "pv-cc");
     }
     if (dps_dc && dj_pv) {
-      wire(dps_dc, "pos", dj_pv, "pos_in", "#ef4444", dj_pv.mm2, dj_pv.designA, "pv-cc");
-      wire(dps_dc, "neg", dj_pv, "neg_in", "#111827", dj_pv.mm2, dj_pv.designA, "pv-cc");
+      wire(dps_dc, "pos", dj_pv, "pos_in", "#ef4444", pvMm, pvIb, "pv-cc");
+      wire(dps_dc, "neg", dj_pv, "neg_in", "#111827", pvMm, pvIb, "pv-cc");
     }
-    if (dj_pv && inverter) {
-      wire(dj_pv, "pos_out", inverter, "dc_pos", "#ef4444", dj_pv.mm2, dj_pv.designA, "pv-cc");
-      wire(dj_pv, "neg_out", inverter, "dc_neg", "#111827", dj_pv.mm2, dj_pv.designA, "pv-cc");
+    if (dj_pv && mppt) {
+      wire(dj_pv, "pos_out", mppt, "pv_pos", "#ef4444", pvMm, pvIb, "pv-cc");
+      wire(dj_pv, "neg_out", mppt, "pv_neg", "#111827", pvMm, pvIb, "pv-cc");
+    } else if (dj_pv && inverter && !mppt) {
+      wire(dj_pv, "pos_out", inverter, "dc_pos", "#ef4444", pvMm, pvIb, "pv-cc");
+      wire(dj_pv, "neg_out", inverter, "dc_neg", "#111827", pvMm, pvIb, "pv-cc");
+    } else if (panel && mppt && !dj_pv) {
+      wire(panel, "pos", mppt, "pv_pos", "#ef4444", pvMm, pvIb, "pv-cc");
+      wire(panel, "neg", mppt, "pv_neg", "#111827", pvMm, pvIb, "pv-cc");
     }
+
+    // MPPT → (DJ carga) → bateria
+    if (mppt && dj_mppt) {
+      wire(mppt, "bat_pos", dj_mppt, "pos_in", "#ef4444", mpMm, mpIb, "mppt-bat");
+      wire(mppt, "bat_neg", dj_mppt, "neg_in", "#111827", mpMm, mpIb, "mppt-bat");
+      if (battery) {
+        wire(dj_mppt, "pos_out", battery, "pos", "#ef4444", mpMm, mpIb, "mppt-bat");
+        wire(dj_mppt, "neg_out", battery, "neg", "#111827", mpMm, mpIb, "mppt-bat");
+      }
+    } else if (mppt && battery) {
+      wire(mppt, "bat_pos", battery, "pos", "#ef4444", mpMm, mpIb, "mppt-bat");
+      wire(mppt, "bat_neg", battery, "neg", "#111827", mpMm, mpIb, "mppt-bat");
+    }
+
+    // Bateria → DJ descarga → inversor
     if (battery && dj_bat) {
-      wire(battery, "pos", dj_bat, "pos_in", "#ef4444", dj_bat.mm2, dj_bat.designA, "bat-cc");
-      wire(battery, "neg", dj_bat, "neg_in", "#111827", dj_bat.mm2, dj_bat.designA, "bat-cc");
+      wire(battery, "pos", dj_bat, "pos_in", "#ef4444", batMm, batIb, "bat-cc");
+      wire(battery, "neg", dj_bat, "neg_in", "#111827", batMm, batIb, "bat-cc");
     }
     if (dj_bat && inverter) {
-      wire(dj_bat, "pos_out", inverter, "dc_pos", "#ef4444", dj_bat.mm2, dj_bat.designA, "bat-cc");
-      wire(dj_bat, "neg_out", inverter, "dc_neg", "#111827", dj_bat.mm2, dj_bat.designA, "bat-cc");
+      wire(dj_bat, "pos_out", inverter, "dc_pos", "#ef4444", batMm, batIb, "bat-cc");
+      wire(dj_bat, "neg_out", inverter, "dc_neg", "#111827", batMm, batIb, "bat-cc");
+    } else if (battery && inverter && !dj_bat) {
+      wire(battery, "pos", inverter, "dc_pos", "#ef4444", batMm, batIb, "bat-cc");
+      wire(battery, "neg", inverter, "dc_neg", "#111827", batMm, batIb, "bat-cc");
     }
     if (inverter && dj_geral) {
       wire(inverter, "ac_l", dj_geral, "L_in", "#a16207", dj_geral.mm2, dj_geral.designA, "geral");

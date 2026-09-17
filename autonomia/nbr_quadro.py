@@ -95,18 +95,30 @@ def build_board(
     cable_ac_m: float = 15,
     cable_bat_m: float = 2,
     cable_pv_m: float = 15,
+    cable_mppt_m: float = 2,
     inverter_w: float = 0,
     inverter_eff_pct: float = 90,
     battery_max_a: float = 0,
+    mppt_a: float = 0,
+    mppt_eff_pct: float = 98,
     circuits_extra: list[dict] | None = None,
 ) -> dict:
-    """Monta o quadro típico off-grid / híbrido a partir da demanda da calculadora."""
+    """Monta o quadro típico off-grid / híbrido a partir da demanda e do fluxo de energia.
+
+    Trechos dimensionados (NBR 5410 / NBR 16690):
+      1) FV → MPPT/inversor (pv-cc): corrente da string × 1,25
+      2) MPPT → bateria (mppt-bat): corrente de carga (limitada pelo MPPT) × 1,25
+      3) Bateria → inversor (bat-cc): dreno do inversor em plena carga × 1,25
+      4) AC carga / geral
+    """
     load = max(0.0, float(load_w))
     inv_w = max(0.0, float(inverter_w or 0))
     eta = min(99.5, max(40.0, float(inverter_eff_pct or 90))) / 100.0
+    mppt_eta = min(99.5, max(80.0, float(mppt_eff_pct or 98))) / 100.0
+    mppt_rated = max(0.0, float(mppt_a or 0))
     # Potência CA de projeto: maior entre carga informada e potência nominal do inversor.
     p_ac = max(load, inv_w)
-    # Potência CC no banco: dreno medido/calculado OU inversor em plena carga / η.
+    # Potência CC no banco (descarga): inversor em plena carga / η.
     p_dc_from_inv = (inv_w / eta) if inv_w > 0 else 0.0
     p_dc_from_load = (load / eta) if load > 0 else 0.0
     bat_draw = max(float(battery_draw_w or 0), p_dc_from_inv, p_dc_from_load, p_ac)
@@ -115,18 +127,28 @@ def build_board(
     stc = max(0.0, float(panel_stc_w))
     pv_bus = max(24.0, float(pv_v))
 
-    # Corrente de projeto AC (fator 1,25) — NBR 5410
+    # --- Correntes de projeto por trecho ---
+    # AC (NBR 5410): fator 1,25 + FP 0,95
     ib_ac = (p_ac / (ac * 0.95)) * 1.25 if p_ac > 0 else 6
-    # Banco CC: I = P_cc / V_banco × 1,25 (ex.: 4000 W / 24 V → ~208 A antes do fator; com η < 1 sobe)
+    # Bateria → inversor (descarga): Ib = P_cc / V_banco × 1,25
     ib_bat = (bat_draw / bat_v) * 1.25 if bat_draw > 0 else 10
-    # FV: potência STC / Vmp aproximada × 1,25 (NBR 16690)
+    # FV → MPPT (NBR 16690): Imp ≈ P_STC/Vmp; proteção ≥ 1,25×Imp (aprox. Isc)
     ib_pv = (stc / pv_bus) * 1.25 if stc > 0 else 10
+    # MPPT → bateria (carga): menor entre saída do MPPT e potência FV útil / V_banco
+    p_charge = stc * mppt_eta if stc > 0 else 0.0
+    i_charge_calc = (p_charge / bat_v) if p_charge > 0 else 0.0
+    if mppt_rated > 0 and i_charge_calc > 0:
+        i_charge = min(mppt_rated, i_charge_calc)
+    elif mppt_rated > 0:
+        i_charge = mppt_rated
+    else:
+        i_charge = i_charge_calc
+    ib_mppt = max(i_charge * 1.25, 6.0) if (mppt_rated > 0 or stc > 0) else 0.0
 
     ac_ckt = size_circuit(ib_ac, cable_ac_m, ac, 0.025, "C")
     bat_ckt = size_circuit(ib_bat, cable_bat_m, bat_v, 0.01, "C")
     pv_ckt = size_circuit(ib_pv, cable_pv_m, pv_bus, 0.02, "C")
-
-    # Geral: maior entre AC e sobra
+    mppt_ckt = size_circuit(ib_mppt, cable_mppt_m, bat_v, 0.01, "C") if ib_mppt > 0 else None
     geral = size_circuit(max(ib_ac * 1.1, 16), 1, ac, 0.03, "C")
 
     circuits = [
@@ -153,27 +175,45 @@ def build_board(
         },
         {
             "id": "bat-cc",
-            "name": "Banco de baterias (CC)",
+            "name": "Bateria → inversor (descarga CC)",
             "kind": "dc",
             "role": "bateria",
             "powerW": bat_draw,
             "voltageV": bat_v,
             "lengthM": cable_bat_m,
             **bat_ckt,
-            "protections": ["Seccionadora CC", "Fusível / DJ CC junto ao banco"],
+            "protections": ["DJ/fusível CC junto ao banco (lado inversor)"],
+            "flow": "battery→inverter",
         },
         {
             "id": "pv-cc",
-            "name": "String FV → MPPT",
+            "name": "String FV → MPPT / entrada FV",
             "kind": "dc",
             "role": "fv",
             "powerW": stc,
             "voltageV": pv_bus,
             "lengthM": cable_pv_m,
             **pv_ckt,
-            "protections": ["DPS CC", "Seccionadora / gPV"],
+            "protections": ["DPS CC", "Seccionadora / gPV (NBR 16690)"],
+            "flow": "pv→mppt",
         },
     ]
+    if mppt_ckt:
+        circuits.append(
+            {
+                "id": "mppt-bat",
+                "name": "MPPT → bateria (carga CC)",
+                "kind": "dc",
+                "role": "carga-banco",
+                "powerW": round(min(p_charge, mppt_rated * bat_v) if mppt_rated else p_charge, 1),
+                "voltageV": bat_v,
+                "lengthM": cable_mppt_m,
+                **mppt_ckt,
+                "protections": ["DJ CC entre controlador e banco"],
+                "flow": "mppt→battery",
+                "mpptRatedA": mppt_rated or None,
+            }
+        )
 
     for extra in circuits_extra or []:
         p = float(extra.get("powerW") or 0)
@@ -224,18 +264,18 @@ def build_board(
 
     ok = all(c.get("ok") for c in circuits)
     notes = [
-        "Critério NBR 5410: Ib ≤ In ≤ Iz (corrente de projeto ≤ disjuntor ≤ ampacidade do cabo).",
-        "Banco CC: Ib = (P_inversor / η) / V_banco × 1,25 — valores tirados dos equipamentos (potência, tensão, rendimento).",
-        "O quadro calcula Ib em cada circuito e indica o disjuntor In adequado (ex.: banco CC bateria→inversor).",
-        "Ib = corrente de projeto do circuito (fator 1,25) — exibida em cada cabo do quadro.",
-        "Queda de tensão: AC ≤ 2,5–4%; CC banco ≤ 1%; FV ≤ 2% (NBR 5410 / NBR 16690).",
-        "Valores orientativos — não substituem projeto, ART nem o parecer da concessionária.",
+        "Fluxo off-grid: FV → (DJ/DPS) → MPPT → bateria → (DJ) → inversor → AC.",
+        "NBR 5410: Ib ≤ In ≤ Iz em cada trecho (corrente de projeto ≤ disjuntor ≤ ampacidade).",
+        "NBR 16690: string FV protegida com fator 1,25 sobre a corrente da string.",
+        "MPPT→bateria: corrente de carga limitada pelo controlador; bateria→inversor: P/η/V × 1,25.",
+        "Queda de tensão: AC ≤ 2,5–4%; CC banco ≤ 1%; FV ≤ 2%.",
+        "Valores orientativos — não substituem projeto, ART nem parecer da concessionária.",
     ]
     bat_max = max(0.0, float(battery_max_a or 0))
     if bat_max > 0 and ib_bat > bat_max:
         notes.insert(
             0,
-            f"Atenção: Ib do banco ({ib_bat:.1f} A) excede a corrente máxima da bateria ({bat_max:.0f} A). "
+            f"Atenção: Ib descarga ({ib_bat:.1f} A) excede a corrente máxima da bateria ({bat_max:.0f} A). "
             "Aumente banco em paralelo ou reduza a potência do inversor.",
         )
         for c in circuits:
@@ -258,6 +298,8 @@ def build_board(
             "dcPowerW": bat_draw,
             "acPowerW": p_ac,
             "batteryMaxA": bat_max or None,
+            "mpptA": mppt_rated or None,
+            "chargeA": round(i_charge, 2) if i_charge else None,
         },
         "circuits": circuits,
         "bom": bom,
