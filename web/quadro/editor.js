@@ -25,8 +25,10 @@
       w: 72,
       h: 140,
       terminals: [
-        { id: "pos_in", x: 36, y: 2, kind: "dc+", name: "+ entrada" },
-        { id: "pos_out", x: 36, y: 138, kind: "dc+", name: "+ saída" },
+        { id: "pos_in", x: 28, y: 2, kind: "dc+", name: "+ entrada" },
+        { id: "neg_in", x: 44, y: 2, kind: "dc-", name: "− entrada" },
+        { id: "pos_out", x: 28, y: 138, kind: "dc+", name: "+ saída" },
+        { id: "neg_out", x: 44, y: 138, kind: "dc-", name: "− saída" },
       ],
     },
     dr: {
@@ -129,13 +131,138 @@
     wires: [],
     selected: null,
     wireFrom: null,
+    reconnect: null,
     drag: null,
     boardData: null,
+    equipment: [],
+    cableProductId: null,
     uid: 1,
   };
 
   function uid(prefix) {
     return prefix + "-" + state.uid++;
+  }
+
+  function productById(id) {
+    return state.equipment.find((item) => item.id === id) || null;
+  }
+
+  function productsForType(type) {
+    if (type === "wire") return state.equipment.filter((item) => item.componentType === "wire");
+    return state.equipment.filter((item) => item.componentType === type);
+  }
+
+  function nearestProduct(type, currentA) {
+    const products = productsForType(type).filter((item) => item.currentA);
+    return (
+      products
+        .filter((item) => item.currentA >= Number(currentA || 0))
+        .sort((a, b) => a.currentA - b.currentA)[0] ||
+      products.sort((a, b) => b.currentA - a.currentA)[0] ||
+      null
+    );
+  }
+
+  function productMeta(product) {
+    if (!product) return "";
+    return [
+      product.brand,
+      product.model,
+      product.currentA ? product.currentA + " A" : null,
+      product.poles ? product.poles + "P" : null,
+      product.voltage || (product.voltageV ? product.voltageV + " V" : null),
+      product.breakingCapacityKa ? product.breakingCapacityKa + " kA" : null,
+      product.sectionMm2 ? product.sectionMm2 + " mm²" : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  }
+
+  async function loadEquipmentDb() {
+    const response = await fetch("/quadro/equipment-db.json?v=1");
+    if (!response.ok) throw new Error("Falha ao carregar banco de equipamentos");
+    const data = await response.json();
+    state.equipment = data.items || [];
+    renderLibrary();
+    fillCableProducts();
+  }
+
+  function renderLibrary() {
+    const list = $("library-list");
+    const query = ($("library-search").value || "").trim().toLocaleLowerCase("pt-BR");
+    const category = $("library-category").value;
+    const items = state.equipment.filter((item) => {
+      if (category && item.category !== category) return false;
+      const haystack = [item.name, item.brand, item.model, item.currentA, item.voltage, item.standard]
+        .filter(Boolean)
+        .join(" ")
+        .toLocaleLowerCase("pt-BR");
+      return !query || haystack.includes(query);
+    });
+    list.innerHTML = "";
+    if (!items.length) {
+      list.innerHTML = '<p class="library-empty">Nenhum equipamento encontrado.</p>';
+      return;
+    }
+    items.forEach((item) => {
+      const card = document.createElement("div");
+      card.className = "library-card";
+      card.tabIndex = 0;
+      card.setAttribute("role", "button");
+      card.draggable = item.componentType !== "wire";
+      card.dataset.productId = item.id;
+      card.innerHTML = `
+        <img src="${item.image || TYPES[item.componentType]?.img || "/quadro/img/busbar.svg"}" alt="">
+        <span><strong>${item.name}</strong><small>${productMeta(item)}</small></span>
+        ${item.source ? `<a class="library-source" href="${item.source}" target="_blank" rel="noopener noreferrer" title="Fonte oficial">↗</a>` : ""}
+      `;
+      card.addEventListener("click", (event) => {
+        if (event.target.closest(".library-source")) return;
+        if (item.componentType === "wire") {
+          selectCableProduct(item.id);
+          if (state.selected?.kind === "wire") applyProductToSelection(item);
+          return;
+        }
+        addNode(item.componentType, 220 + Math.random() * 360, 180 + Math.random() * 200, {
+          productId: item.id,
+          label: item.name,
+          inA: item.currentA || null,
+          mm2: item.sectionMm2 || null,
+        });
+      });
+      card.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          card.click();
+        }
+      });
+      card.addEventListener("dragstart", (event) => {
+        event.dataTransfer.setData("application/x-equipment-id", item.id);
+        event.dataTransfer.setData("text/plain", item.componentType);
+      });
+      list.appendChild(card);
+    });
+  }
+
+  function fillCableProducts() {
+    const select = $("wire-product");
+    const cables = productsForType("wire");
+    select.innerHTML = "";
+    cables.forEach((cable) => {
+      const option = document.createElement("option");
+      option.value = cable.id;
+      option.textContent = cable.name;
+      select.appendChild(option);
+    });
+    if (cables[0]) selectCableProduct(cables[0].id);
+  }
+
+  function selectCableProduct(id) {
+    const cable = productById(id);
+    if (!cable || cable.componentType !== "wire") return;
+    state.cableProductId = cable.id;
+    $("wire-product").value = cable.id;
+    if (cable.colors?.[0]) $("wire-color").value = cable.colors[0];
   }
 
   function readParams() {
@@ -187,14 +314,16 @@
   function addNode(type, x, y, extras = {}) {
     const def = TYPES[type];
     if (!def) return null;
+    const product = productById(extras.productId);
     const node = {
       id: uid("n"),
       type,
       x: Math.round(x),
       y: Math.round(y),
-      label: extras.label || def.label,
-      inA: extras.inA || null,
-      mm2: extras.mm2 || null,
+      productId: extras.productId || null,
+      label: extras.label || product?.name || def.label,
+      inA: extras.inA || product?.currentA || null,
+      mm2: extras.mm2 || product?.sectionMm2 || null,
       circuitId: extras.circuitId || null,
     };
     state.nodes.push(node);
@@ -226,6 +355,7 @@
   function setTool(tool) {
     state.tool = tool;
     state.wireFrom = null;
+    state.reconnect = null;
     tempWire.setAttribute("visibility", "hidden");
     document.querySelectorAll(".tool").forEach((b) => b.classList.toggle("active", b.dataset.tool === tool));
     $("wire-hint").textContent =
@@ -238,6 +368,52 @@
 
   function select(sel) {
     state.selected = sel;
+    render();
+    updateInspector();
+  }
+
+  function fillInspectorProducts(type, currentId) {
+    const selectEl = $("insp-product");
+    const products = productsForType(type);
+    selectEl.innerHTML = "";
+    const custom = document.createElement("option");
+    custom.value = "";
+    custom.textContent = "Personalizado / sem catálogo";
+    selectEl.appendChild(custom);
+    products.forEach((product) => {
+      const option = document.createElement("option");
+      option.value = product.id;
+      option.textContent = product.name;
+      selectEl.appendChild(option);
+    });
+    selectEl.value = currentId || "";
+  }
+
+  function applyProductToSelection(product) {
+    if (!state.selected || !product) return;
+    if (state.selected.kind === "node") {
+      const node = state.nodes.find((item) => item.id === state.selected.id);
+      if (!node || product.componentType === "wire") return;
+      node.type = product.componentType;
+      node.productId = product.id;
+      node.label = product.name;
+      node.inA = product.currentA || null;
+      node.mm2 = product.sectionMm2 || node.mm2;
+      // Remove ligações cujos bornes não existem no novo tipo.
+      const terms = new Set(TYPES[node.type].terminals.map((term) => term.id));
+      state.wires = state.wires.filter(
+        (wire) =>
+          (wire.from.node !== node.id || terms.has(wire.from.term)) &&
+          (wire.to.node !== node.id || terms.has(wire.to.term)),
+      );
+    } else {
+      const wire = state.wires.find((item) => item.id === state.selected.id);
+      if (!wire || product.componentType !== "wire") return;
+      wire.productId = product.id;
+      wire.label = product.name;
+      wire.mm2 = product.sectionMm2 || wire.mm2;
+      if (product.colors?.length && !product.colors.includes(wire.color)) wire.color = product.colors[0];
+    }
     render();
     updateInspector();
   }
@@ -255,19 +431,29 @@
     if (state.selected.kind === "node") {
       const n = state.nodes.find((x) => x.id === state.selected.id);
       if (!n) return;
+      const product = productById(n.productId);
       $("insp-title").textContent = n.label;
-      $("insp-meta").textContent = TYPES[n.type].label + " · " + n.id;
+      $("insp-meta").textContent = (productMeta(product) || TYPES[n.type].label) + " · " + n.id;
+      fillInspectorProducts(n.type, n.productId);
       $("insp-label").value = n.label;
       $("insp-in").value = n.inA || "";
       $("insp-mm2").value = n.mm2 || "";
+      $("insp-source").hidden = !product?.source;
+      $("insp-source").href = product?.source || "#";
     } else if (state.selected.kind === "wire") {
       const w = state.wires.find((x) => x.id === state.selected.id);
       if (!w) return;
-      $("insp-title").textContent = "Cabo";
-      $("insp-meta").textContent = w.from.node + "." + w.from.term + " → " + w.to.node + "." + w.to.term;
+      const product = productById(w.productId);
+      $("insp-title").textContent = w.label || "Cabo";
+      $("insp-meta").textContent =
+        (productMeta(product) ? productMeta(product) + " · " : "") +
+        w.from.node + "." + w.from.term + " → " + w.to.node + "." + w.to.term;
+      fillInspectorProducts("wire", w.productId);
       $("insp-label").value = w.label || "Cabo";
       $("insp-in").value = "";
       $("insp-mm2").value = w.mm2 || "";
+      $("insp-source").hidden = !product?.source;
+      $("insp-source").href = product?.source || "#";
     }
   }
 
@@ -310,6 +496,36 @@
         t.textContent = w.mm2 + " mm²";
         wiresG.appendChild(t);
       }
+      const wireSelected = state.selected?.kind === "wire" && state.selected.id === w.id;
+      [
+        { end: "from", point: a.world },
+        { end: "to", point: b.world },
+      ].forEach(({ end, point }) => {
+          const handle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+          handle.setAttribute("cx", point.x);
+          handle.setAttribute("cy", point.y);
+          handle.setAttribute("r", wireSelected ? 8 : 5);
+          handle.setAttribute("fill", w.color || "#a16207");
+          handle.setAttribute("stroke", "#fff");
+          handle.setAttribute("stroke-width", "2");
+          handle.classList.add("wire-endpoint");
+          if (state.reconnect?.wireId === w.id && state.reconnect.end === end) {
+            handle.classList.add("reconnecting");
+          }
+          handle.addEventListener("mousedown", (event) => {
+            event.stopPropagation();
+            state.selected = { kind: "wire", id: w.id };
+            const fixedEnd = end === "from" ? "to" : "from";
+            const fixed = findTerminal(w[fixedEnd].node, w[fixedEnd].term);
+            state.reconnect = { wireId: w.id, end };
+            state.wireFrom = null;
+            tempWire.setAttribute("visibility", "visible");
+            tempWire.setAttribute("d", `M ${fixed.world.x} ${fixed.world.y} L ${point.x} ${point.y}`);
+            $("wire-hint").textContent = "Reconectando cabo: clique no novo borne.";
+            render();
+          });
+          wiresG.appendChild(handle);
+      });
     });
 
     state.nodes.forEach((node) => {
@@ -348,7 +564,8 @@
       tag.setAttribute("font-size", "11");
       tag.setAttribute("font-weight", "600");
       tag.setAttribute("font-family", "Segoe UI,Arial");
-      tag.textContent = node.label + (node.inA ? ` ${node.inA}A` : "");
+      const product = productById(node.productId);
+      tag.textContent = product ? `${product.brand} ${product.model}` : node.label + (node.inA ? ` ${node.inA}A` : "");
       g.appendChild(tag);
 
       def.terminals.forEach((term) => {
@@ -392,6 +609,16 @@
   }
 
   function onTerminalClick(nodeId, termId, evt) {
+    if (state.reconnect) {
+      const wire = state.wires.find((item) => item.id === state.reconnect.wireId);
+      if (wire) wire[state.reconnect.end] = { node: nodeId, term: termId };
+      state.reconnect = null;
+      tempWire.setAttribute("visibility", "hidden");
+      $("wire-hint").textContent = "Cabo reconectado. Clique numa ponta para alterar novamente.";
+      render();
+      updateInspector();
+      return;
+    }
     if (state.tool !== "wire") {
       select({ kind: "node", id: nodeId });
       return;
@@ -413,14 +640,16 @@
     }
     const color = $("wire-color").value || KIND_COLOR[hit.term.kind] || "#a16207";
     const fromNode = state.nodes.find((n) => n.id === state.wireFrom.node);
-    const mm2 = fromNode?.mm2 || hit.node.mm2 || null;
+    const cableProduct = productById(state.cableProductId);
+    const mm2 = cableProduct?.sectionMm2 || fromNode?.mm2 || hit.node.mm2 || null;
     state.wires.push({
       id: uid("w"),
       from: { ...state.wireFrom },
       to: { node: nodeId, term: termId },
       color,
       mm2,
-      label: "Cabo",
+      productId: cableProduct?.id || null,
+      label: cableProduct?.name || "Cabo",
     });
     state.wireFrom = null;
     tempWire.setAttribute("visibility", "hidden");
@@ -474,16 +703,25 @@
 
   function applySizesToNodes(data) {
     const map = {
-      geral: (c) => ({ inA: c.breakerA, mm2: c.mm2, label: `Geral ${c.breakerA}A` }),
-      "ac-carga": (c) => ({ inA: c.breakerA, mm2: c.mm2, label: `Carga ${c.breakerA}A` }),
-      "bat-cc": (c) => ({ inA: c.breakerA, mm2: c.mm2, label: `Bat ${c.breakerA}A` }),
-      "pv-cc": (c) => ({ inA: c.breakerA, mm2: c.mm2, label: `FV ${c.breakerA}A` }),
+      geral: (c) => ({ inA: c.breakerA, mm2: c.mm2 }),
+      "ac-carga": (c) => ({ inA: c.breakerA, mm2: c.mm2 }),
+      "bat-cc": (c) => ({ inA: c.breakerA, mm2: c.mm2 }),
+      "pv-cc": (c) => ({ inA: c.breakerA, mm2: c.mm2 }),
     };
     data.circuits.forEach((c) => {
       const fn = map[c.id];
       if (!fn) return;
       const node = state.nodes.find((n) => n.circuitId === c.id);
-      if (node) Object.assign(node, fn(c));
+      if (node) {
+        Object.assign(node, fn(c));
+        if (node.type === "breaker_ac" || node.type === "breaker_dc") {
+          const product = nearestProduct(node.type, c.breakerA);
+          if (product) {
+            node.productId = product.id;
+            node.label = product.name;
+          }
+        }
+      }
     });
   }
 
@@ -493,25 +731,29 @@
     state.uid = 1;
     const byId = {};
     const ck = Object.fromEntries(data.circuits.map((c) => [c.id, c]));
+    const productExtra = (type, currentA) => {
+      const product = nearestProduct(type, currentA);
+      return product ? { productId: product.id, label: product.name } : {};
+    };
 
     byId.panel = addNode("panel", 100, 220, { label: "String FV", circuitId: "pv-cc", mm2: ck["pv-cc"]?.mm2 });
     byId.dps_dc = addNode("dps_dc", 280, 160, { label: "DPS CC", circuitId: "pv-cc" });
     byId.dj_pv = addNode("breaker_dc", 400, 160, {
-      label: `FV ${ck["pv-cc"]?.breakerA || 40}A`,
+      ...productExtra("breaker_dc", ck["pv-cc"]?.breakerA || 40),
       circuitId: "pv-cc",
       inA: ck["pv-cc"]?.breakerA,
       mm2: ck["pv-cc"]?.mm2,
     });
     byId.battery = addNode("battery", 100, 420, { label: `Banco ${data.demand.batteryV}V`, circuitId: "bat-cc", mm2: ck["bat-cc"]?.mm2 });
     byId.dj_bat = addNode("breaker_dc", 280, 380, {
-      label: `Bat ${ck["bat-cc"]?.breakerA || 25}A`,
+      ...productExtra("breaker_dc", ck["bat-cc"]?.breakerA || 25),
       circuitId: "bat-cc",
       inA: ck["bat-cc"]?.breakerA,
       mm2: ck["bat-cc"]?.mm2,
     });
     byId.inverter = addNode("inverter", 520, 400, { label: "Inversor", mm2: ck["ac-carga"]?.mm2 });
     byId.dj_geral = addNode("breaker_ac", 760, 160, {
-      label: `Geral ${ck.geral?.breakerA || 16}A`,
+      ...productExtra("breaker_ac", ck.geral?.breakerA || 16),
       circuitId: "geral",
       inA: ck.geral?.breakerA,
       mm2: ck.geral?.mm2,
@@ -519,7 +761,7 @@
     byId.dr = addNode("dr", 880, 160, { label: "DR 30 mA" });
     byId.dps_ac = addNode("dps_ac", 1020, 160, { label: "DPS AC" });
     byId.dj_load = addNode("breaker_ac", 1160, 160, {
-      label: `Carga ${ck["ac-carga"]?.breakerA || 6}A`,
+      ...productExtra("breaker_ac", ck["ac-carga"]?.breakerA || 6),
       circuitId: "ac-carga",
       inA: ck["ac-carga"]?.breakerA,
       mm2: ck["ac-carga"]?.mm2,
@@ -530,13 +772,19 @@
   }
 
   function wire(aNode, aTerm, bNode, bTerm, color, mm2) {
+    const cable =
+      productsForType("wire")
+        .filter((item) => item.sectionMm2 >= Number(mm2 || 0))
+        .sort((a, b) => a.sectionMm2 - b.sectionMm2)[0] ||
+      productById(state.cableProductId);
     state.wires.push({
       id: uid("w"),
       from: { node: aNode.id, term: aTerm },
       to: { node: bNode.id, term: bTerm },
       color,
       mm2: mm2 || aNode.mm2 || bNode.mm2 || null,
-      label: "Cabo",
+      productId: cable?.id || null,
+      label: cable?.name || "Cabo",
     });
   }
 
@@ -564,10 +812,19 @@
       wire(panel, "neg", dps_dc, "neg", "#111827", panel.mm2);
     }
     if (dps_dc && dj_pv) wire(dps_dc, "pos", dj_pv, "pos_in", "#ef4444", dj_pv.mm2);
-    if (dj_pv && inverter) wire(dj_pv, "pos_out", inverter, "dc_pos", "#ef4444", dj_pv.mm2);
-    if (battery && dj_bat) wire(battery, "pos", dj_bat, "pos_in", "#ef4444", dj_bat.mm2);
-    if (dj_bat && inverter) wire(dj_bat, "pos_out", inverter, "dc_pos", "#ef4444", dj_bat.mm2);
-    if (battery && inverter) wire(battery, "neg", inverter, "dc_neg", "#111827", dj_bat?.mm2);
+    if (dps_dc && dj_pv) wire(dps_dc, "neg", dj_pv, "neg_in", "#111827", dj_pv.mm2);
+    if (dj_pv && inverter) {
+      wire(dj_pv, "pos_out", inverter, "dc_pos", "#ef4444", dj_pv.mm2);
+      wire(dj_pv, "neg_out", inverter, "dc_neg", "#111827", dj_pv.mm2);
+    }
+    if (battery && dj_bat) {
+      wire(battery, "pos", dj_bat, "pos_in", "#ef4444", dj_bat.mm2);
+      wire(battery, "neg", dj_bat, "neg_in", "#111827", dj_bat.mm2);
+    }
+    if (dj_bat && inverter) {
+      wire(dj_bat, "pos_out", inverter, "dc_pos", "#ef4444", dj_bat.mm2);
+      wire(dj_bat, "neg_out", inverter, "dc_neg", "#111827", dj_bat.mm2);
+    }
     if (inverter && dj_geral) {
       wire(inverter, "ac_l", dj_geral, "L_in", "#a16207", dj_geral.mm2);
       wire(inverter, "ac_n", dj_geral, "N_in", "#3b82f6", dj_geral.mm2);
@@ -591,18 +848,23 @@
 
   function bind() {
     document.querySelectorAll(".tool").forEach((b) => b.addEventListener("click", () => setTool(b.dataset.tool)));
-    document.querySelectorAll(".pal-item").forEach((btn) => {
-      btn.addEventListener("click", () => addNode(btn.dataset.type, 200 + Math.random() * 400, 180));
-      btn.addEventListener("dragstart", (e) => {
-        e.dataTransfer.setData("text/plain", btn.dataset.type);
-      });
-    });
+    $("library-search").addEventListener("input", renderLibrary);
+    $("library-category").addEventListener("change", renderLibrary);
+    $("wire-product").addEventListener("change", () => selectCableProduct($("wire-product").value));
     svg.addEventListener("dragover", (e) => e.preventDefault());
     svg.addEventListener("drop", (e) => {
       e.preventDefault();
-      const type = e.dataTransfer.getData("text/plain");
+      const product = productById(e.dataTransfer.getData("application/x-equipment-id"));
+      const type = product?.componentType || e.dataTransfer.getData("text/plain");
       const p = svgPoint(e);
-      addNode(type, p.x - 30, p.y - 40);
+      if (type !== "wire") {
+        addNode(type, p.x - 30, p.y - 40, {
+          productId: product?.id,
+          label: product?.name,
+          inA: product?.currentA,
+          mm2: product?.sectionMm2,
+        });
+      }
     });
 
     svg.addEventListener("mousemove", (e) => {
@@ -622,6 +884,15 @@
           tempWire.setAttribute("d", `M ${a.world.x} ${a.world.y} L ${p.x} ${p.y}`);
         }
       }
+      if (state.reconnect) {
+        const wire = state.wires.find((item) => item.id === state.reconnect.wireId);
+        const fixedEnd = state.reconnect.end === "from" ? "to" : "from";
+        const fixed = wire && findTerminal(wire[fixedEnd].node, wire[fixedEnd].term);
+        if (fixed) {
+          tempWire.setAttribute("visibility", "visible");
+          tempWire.setAttribute("d", `M ${fixed.world.x} ${fixed.world.y} L ${p.x} ${p.y}`);
+        }
+      }
     });
     window.addEventListener("mouseup", () => {
       state.drag = null;
@@ -632,7 +903,9 @@
     window.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         state.wireFrom = null;
+        state.reconnect = null;
         tempWire.setAttribute("visibility", "hidden");
+        render();
       }
       if ((e.key === "Delete" || e.key === "Backspace") && state.selected) {
         if (state.selected.kind === "node") {
@@ -663,6 +936,10 @@
       render();
       updateInspector();
     });
+    $("insp-product").addEventListener("change", () => {
+      const product = productById($("insp-product").value);
+      if (product) applyProductToSelection(product);
+    });
     $("insp-delete").addEventListener("click", () => {
       if (!state.selected) return;
       if (state.selected.kind === "node") {
@@ -692,8 +969,17 @@
     });
   }
 
-  fillDemandForm(readParams());
-  bind();
-  setTool("select");
-  autosize({ rebuild: true });
+  async function init() {
+    fillDemandForm(readParams());
+    bind();
+    setTool("select");
+    try {
+      await loadEquipmentDb();
+    } catch (error) {
+      $("library-list").innerHTML = `<p class="library-empty">${error.message}</p>`;
+    }
+    await autosize({ rebuild: true });
+  }
+
+  init();
 })();

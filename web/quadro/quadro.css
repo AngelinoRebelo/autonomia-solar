@@ -77,7 +77,7 @@ h2 { margin: 12px 0 8px; font-size: 0.95rem; }
 
 .editor-shell {
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: 330px 1fr;
   gap: 0;
   flex: 1;
   min-height: 640px;
@@ -98,6 +98,69 @@ h2 { margin: 12px 0 8px; font-size: 0.95rem; }
   text-align: left;
 }
 .pal-item img { width: 36px; height: 36px; object-fit: contain; background: #0f172a; border-radius: 4px; }
+.library-search,
+#library-category {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 9px;
+  font: inherit;
+  color: var(--ink);
+  background: #fff;
+}
+.library-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-height: 430px;
+  overflow: auto;
+  padding-right: 3px;
+}
+.library-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+  cursor: grab;
+}
+.library-card:hover { border-color: var(--blue); background: #f8fbff; }
+.library-card img {
+  width: 42px;
+  height: 48px;
+  object-fit: contain;
+  border-radius: 4px;
+  background: #0f172a;
+}
+.library-card strong {
+  display: block;
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+.library-card small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.68rem;
+  margin-top: 2px;
+}
+.library-source {
+  position: absolute;
+  right: 5px;
+  top: 4px;
+  z-index: 2;
+  color: var(--blue);
+  text-decoration: none;
+  font-size: 0.75rem;
+  padding: 2px 4px;
+}
+.library-empty { color: var(--muted); font-size: 0.8rem; padding: 8px; }
 .tools { display: grid; grid-template-columns: 1fr; gap: 6px; }
 .tool.active { border-color: var(--blue); background: #eef6ff; color: var(--blue); font-weight: 600; }
 .palette label, .inspector label, .wire-color {
@@ -138,6 +201,23 @@ h2 { margin: 12px 0 8px; font-size: 0.95rem; }
   overflow: auto;
 }
 .inspector .ghost { width: 100%; justify-content: center; margin-top: 6px; }
+.source-link {
+  display: inline-block;
+  margin: 8px 0;
+  color: var(--blue);
+  font-size: 0.82rem;
+  text-decoration: none;
+}
+.source-link:hover { text-decoration: underline; }
+.wire-endpoint {
+  cursor: pointer;
+  filter: drop-shadow(0 1px 2px rgba(15, 23, 42, .35));
+}
+.wire-endpoint:hover,
+.wire-endpoint.reconnecting {
+  stroke: #2d8cf0;
+  stroke-width: 4;
+}
 
 .tables {
   display: grid;
